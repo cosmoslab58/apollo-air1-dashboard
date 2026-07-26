@@ -30,6 +30,12 @@ NUMBER_BOUNDS = {
     mqtt_bridge.SEN55_TEMPERATURE_OFFSET: (-70, 70),
     mqtt_bridge.SEN55_HUMIDITY_OFFSET: (-70, 70),
     mqtt_bridge.DPS310_PRESSURE_OFFSET: (-100, 100),
+    # 0 is the off position, matching the firmware's widened floor.
+    mqtt_bridge.LED_BRIGHTNESS: (0, 100),
+}
+SWITCH_IDS = {
+    mqtt_bridge.PREVENT_SLEEP,
+    mqtt_bridge.LED_ALARM_MODE,
 }
 BUTTON_IDS = {
     mqtt_bridge.CALIBRATE_SCD40,
@@ -590,7 +596,7 @@ def api_control_switch(object_id):
     unavailable = _mqtt_unavailable_response()
     if unavailable:
         return unavailable
-    if object_id != mqtt_bridge.PREVENT_SLEEP:
+    if object_id not in SWITCH_IDS:
         return jsonify({"error": "unknown switch"}), 404
     body = request.get_json(silent=True) or {}
     if not isinstance(body.get("state"), bool):

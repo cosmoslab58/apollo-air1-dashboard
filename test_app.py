@@ -73,6 +73,57 @@ def test_control_unknown_switch_is_404(client, monkeypatch):
     assert res.status_code == 404
 
 
+def test_control_led_alarm_mode_is_accepted(client, monkeypatch):
+    """The mode toggle must be in the switch allowlist. Before this it held only
+    prevent_sleep, so the control would have 404'd rather than reaching the
+    device."""
+    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    published = []
+    monkeypatch.setattr(
+        app_module.mqtt_bridge, "publish_switch",
+        lambda object_id, on: published.append((object_id, on)),
+    )
+    res = client.post("/api/control/switch/led_alarm_mode", json={"state": True})
+    assert res.status_code == 200
+    assert published == [("led_alarm_mode", True)]
+
+
+def test_control_switch_rejects_non_boolean_state(client, monkeypatch):
+    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    res = client.post("/api/control/switch/led_alarm_mode", json={"state": "on"})
+    assert res.status_code == 400
+
+
+def test_led_brightness_accepts_full_range_including_zero(client, monkeypatch):
+    """0 is the off position, so the bound has to start there -- upstream's
+    number floors at 5, and reusing that would leave no way to turn the LED
+    off from the dashboard."""
+    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    published = []
+    monkeypatch.setattr(
+        app_module.mqtt_bridge, "publish_number",
+        lambda object_id, value: published.append((object_id, value)),
+    )
+    for value in (0, 50, 100):
+        res = client.post(
+            "/api/control/number/led_brightness", json={"value": value}
+        )
+        assert res.status_code == 200, value
+    assert published == [
+        ("led_brightness", 0),
+        ("led_brightness", 50),
+        ("led_brightness", 100),
+    ]
+
+
+def test_led_brightness_rejects_out_of_range(client, monkeypatch):
+    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    res = client.post(
+        "/api/control/number/led_brightness", json={"value": 101}
+    )
+    assert res.status_code == 400
+
+
 def test_control_number_out_of_bounds_is_400(client, monkeypatch):
     monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
     res = client.post("/api/control/number/sleep_duration", json={"value": 99999})

@@ -283,6 +283,17 @@
       const rocker = document.getElementById("rocker-sleep");
       rocker.setAttribute("aria-pressed", String(!!s.prevent_sleep));
 
+      // Don't fight the user mid-drag: only adopt the device's value when the
+      // slider isn't focused, or a poll landing between drag and publish would
+      // snap the handle back.
+      const bright = document.getElementById("led-brightness");
+      if (typeof s.led_brightness === "number" && document.activeElement !== bright) {
+        bright.value = String(s.led_brightness);
+        document.getElementById("val-led-brightness").textContent = String(Math.round(s.led_brightness));
+      }
+      document.getElementById("rocker-led-mode")
+        .setAttribute("aria-pressed", String(!!s.led_alarm_mode));
+
       Object.entries(stepperConf).forEach(([key, conf]) => {
         const v = s[conf.stateKey];
         if (typeof v === "number") {
@@ -329,6 +340,46 @@
       toast("Couldn't send that — " + e.message);
     }
   });
+
+  // Both LED toggles follow the prevent_sleep pattern: flip optimistically so
+  // the control feels immediate, revert on failure. The device applies these
+  // straight away rather than at next wake, since it is mains-powered.
+  function wireLedRocker(elementId, objectId, onMessage, offMessage) {
+    const el = document.getElementById(elementId);
+    el.addEventListener("click", async () => {
+      const on = el.getAttribute("aria-pressed") !== "true";
+      el.setAttribute("aria-pressed", String(on));
+      try {
+        await postControl(`/api/control/switch/${objectId}`, { state: on });
+        toast(on ? onMessage : offMessage);
+      } catch (e) {
+        el.setAttribute("aria-pressed", String(!on));
+        toast("Couldn't send that — " + e.message);
+      }
+    });
+  }
+
+  // Publish on release rather than on every input event -- dragging fires
+  // input continuously and each one is an MQTT publish. The label still tracks
+  // the handle live so the control feels responsive.
+  const ledBrightness = document.getElementById("led-brightness");
+  const ledBrightnessLabel = document.getElementById("val-led-brightness");
+  ledBrightness.addEventListener("input", () => {
+    ledBrightnessLabel.textContent = ledBrightness.value;
+  });
+  ledBrightness.addEventListener("change", async () => {
+    const v = Number(ledBrightness.value);
+    try {
+      await postControl("/api/control/number/led_brightness", { value: v });
+      toast(v === 0 ? "LED off" : `LED brightness ${v}%`);
+    } catch (e) {
+      toast("Couldn't send that — " + e.message);
+    }
+  });
+
+  wireLedRocker("rocker-led-mode", "led_alarm_mode",
+    "Alarm mode — dark until the air is dangerous",
+    "Indicator mode — steady colour for the current air quality");
 
   async function pressButton(objectId, sentMessage) {
     try {

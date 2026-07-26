@@ -89,6 +89,28 @@
       <div class="control-groups">
 
         <div class="control-card">
+          <h3>Status LED</h3>
+          <div class="control-row">
+            <div class="control-label">
+              <span class="cl-name">Brightness</span>
+              <span class="cl-help">0 turns the LED off entirely</span>
+            </div>
+            <div class="slider">
+              <input type="range" id="led-brightness" min="0" max="100" step="1" value="100"
+                     aria-label="LED brightness">
+              <span class="slider-value"><span id="val-led-brightness">—</span><span class="stepper-unit">%</span></span>
+            </div>
+          </div>
+          <div class="control-row">
+            <div class="control-label">
+              <span class="cl-name">Alarm mode</span>
+              <span class="cl-help">On: dark until the air is dangerous, then strobes. Off: steady colour for the current air quality</span>
+            </div>
+            <button class="rocker" id="rocker-led-mode" aria-pressed="false" aria-label="LED alarm mode"></button>
+          </div>
+        </div>
+
+        <div class="control-card">
           <h3>Sleep</h3>
           <div class="control-row">
             <div class="control-label">
