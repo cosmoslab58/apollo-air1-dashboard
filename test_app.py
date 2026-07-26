@@ -106,20 +106,20 @@ def test_led_brightness_accepts_full_range_including_zero(client, monkeypatch):
     )
     for value in (0, 50, 100):
         res = client.post(
-            "/api/control/number/air_quality_led_brightness", json={"value": value}
+            "/api/control/number/led_brightness", json={"value": value}
         )
         assert res.status_code == 200, value
     assert published == [
-        ("air_quality_led_brightness", 0),
-        ("air_quality_led_brightness", 50),
-        ("air_quality_led_brightness", 100),
+        ("led_brightness", 0),
+        ("led_brightness", 50),
+        ("led_brightness", 100),
     ]
 
 
 def test_led_brightness_rejects_out_of_range(client, monkeypatch):
     monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
     res = client.post(
-        "/api/control/number/air_quality_led_brightness", json={"value": 101}
+        "/api/control/number/led_brightness", json={"value": 101}
     )
     assert res.status_code == 400
 

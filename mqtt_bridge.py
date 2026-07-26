@@ -21,7 +21,11 @@ PREVENT_SLEEP = "prevent_sleep"
 # LED brightness doubles as the master: 0 % is off, so there is no separate
 # enable switch. LED_ALARM_MODE picks the behaviour -- on = dark until a reading
 # is dangerous then strobe, off = steady air-quality colour.
-LED_BRIGHTNESS = "air_quality_led_brightness"
+# NOTE: ESPHome derives the MQTT object_id from the entity *name*, not its
+# yaml id. The name is "LED Brightness", so the topic is led_brightness even
+# though the id is still air_quality_led_brightness. Getting this wrong fails
+# silently -- publishes land on a topic nothing subscribes to.
+LED_BRIGHTNESS = "led_brightness"
 LED_ALARM_MODE = "led_alarm_mode"
 SLEEP_DURATION = "sleep_duration"
 SEN55_TEMPERATURE_OFFSET = "sen55_temperature_offset"

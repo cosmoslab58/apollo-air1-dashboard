@@ -370,7 +370,7 @@
   ledBrightness.addEventListener("change", async () => {
     const v = Number(ledBrightness.value);
     try {
-      await postControl("/api/control/number/air_quality_led_brightness", { value: v });
+      await postControl("/api/control/number/led_brightness", { value: v });
       toast(v === 0 ? "LED off" : `LED brightness ${v}%`);
     } catch (e) {
       toast("Couldn't send that — " + e.message);
