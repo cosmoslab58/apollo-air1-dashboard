@@ -14,31 +14,33 @@ concurrency:
 jobs:
   lint-and-test:
     name: Lint & test
-    # Runs on the host-native self-hosted runner on bodhi (systemd --user
-    # service github-runner-apollo-air1-dashboard, one per repo like the other
-    # apps on the box). The Docker build job below stays on ubuntu-latest as a
-    # clean-room PR check. If the runner is offline this job queues until it's
-    # back.
-    runs-on: self-hosted
-    env:
-      # bodhi runs Debian 13, which actions/setup-python has no prebuilt Python
-      # for ("version 3.11 ... not found for Debian 13"), so use the host's
-      # pyenv interpreter -- the same approach the other apps on this box take.
-      # pyenv's global is 3.12; the app only pins 3.11 for its Docker runtime,
-      # and lint/tests run fine on 3.12.
-      PATH: /home/nathan/.pyenv/shims:/home/nathan/.pyenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    # Runs GitHub-hosted, not on the self-hosted runner. This repo is public
+    # and this job triggers on pull_request, so on a self-hosted runner a fork
+    # could execute arbitrary code on bodhi via requirements.txt or the test
+    # suite. Nothing here needs the lab -- it is lint, byte-compile and pytest
+    # -- so a throwaway VM is both safer and free (public repos get unlimited
+    # GitHub-hosted minutes). Only the deploy job below still needs bodhi, and
+    # it is gated to pushes on main.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
-      - name: Create venv and install dependencies
-        # An isolated venv per run keeps ruff/pytest/deps out of the shared
-        # pyenv site-packages. Adding it to $GITHUB_PATH puts python/ruff/pytest
-        # on PATH for the later steps.
+      - name: Set up Python
+        # 3.11 to match the python:3.11-slim base the Dockerfile ships on.
+        # Previously this job borrowed bodhi's pyenv 3.12 because
+        # actions/setup-python has no prebuilt Python for Debian 13 -- an
+        # ubuntu-latest-only problem, so the version now matches production.
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        # No venv needed: the GitHub-hosted runner is destroyed after the job,
+        # so there is no shared site-packages to keep clean.
         run: |
-          python -m venv .venv
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/pip install -r requirements.txt ruff pytest
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt ruff pytest
 
       - name: Ruff lint
         run: ruff check .
