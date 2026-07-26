@@ -36,7 +36,6 @@ NUMBER_BOUNDS = {
 SWITCH_IDS = {
     mqtt_bridge.PREVENT_SLEEP,
     mqtt_bridge.LED_ALARM_MODE,
-    mqtt_bridge.LED_STEADY_IN_ALARM,
 }
 BUTTON_IDS = {
     mqtt_bridge.CALIBRATE_SCD40,

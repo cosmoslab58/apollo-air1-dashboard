@@ -291,11 +291,9 @@
         bright.value = String(s.led_brightness);
         document.getElementById("val-led-brightness").textContent = String(Math.round(s.led_brightness));
       }
-      ledAlarmOn = !!s.led_alarm_mode;
-      ledSteadyOn = !!s.led_steady_in_alarm;
-      document.getElementById("rocker-led-mode").setAttribute("aria-pressed", String(ledAlarmOn));
-      ledSteadyRocker.setAttribute("aria-pressed", String(ledSteadyOn));
-      syncLedModeUi();
+      document.getElementById("rocker-led-mode")
+        .setAttribute("aria-pressed", String(!!s.led_alarm_mode));
+      syncLedBrightnessHelp(!!s.led_alarm_mode);
 
       Object.entries(stepperConf).forEach(([key, conf]) => {
         const v = s[conf.stateKey];
@@ -369,37 +367,17 @@
   // the handle live so the control feels responsive.
   const ledBrightness = document.getElementById("led-brightness");
   const ledBrightnessLabel = document.getElementById("val-led-brightness");
-  const ledBrightnessRow = document.getElementById("row-led-brightness");
   const ledBrightnessHelp = document.getElementById("help-led-brightness");
 
-  const ledSteadyRow = document.getElementById("row-led-steady");
-  const ledSteadyRocker = document.getElementById("rocker-led-steady");
-
-  // Two switches, three behaviours: alarm mode arms the strobe, and this one
-  // decides whether the steady color keeps running underneath it. Mirrored here
-  // rather than read back off the rockers, so an optimistic toggle and its
-  // rollback both re-derive the whole card from one place.
-  let ledAlarmOn = false;
-  let ledSteadyOn = false;
-
-  function syncLedModeUi() {
-    // The firmware ignores the brightness slider whenever there is no steady
-    // color for it to scale: the danger strobe is hardcoded to 100% so a stray
-    // drag can never dim an alarm to invisibility, and not even 0 silences it.
-    // A control that still looks live but does nothing is worse than one that
-    // is visibly out of play, so disable it and say why.
-    const brightnessDead = ledAlarmOn && !ledSteadyOn;
-    ledBrightness.disabled = brightnessDead;
-    ledBrightnessRow.classList.toggle("control-row--off", brightnessDead);
-    ledBrightnessHelp.textContent = brightnessDead
-      ? "The strobe always runs at 100% — brightness applies to the steady color"
+  // The two controls are independent in the firmware, so the help text is the
+  // only thing that moves: the slider governs the steady color and nothing
+  // else, which makes 0 mean "dark between alarms" rather than "LED off"
+  // whenever the strobe is armed. Neither control is ever disabled -- both
+  // always do something.
+  function syncLedBrightnessHelp(alarmOn) {
+    ledBrightnessHelp.textContent = alarmOn
+      ? "0 leaves the LED dark until the strobe fires — the strobe ignores this"
       : "0 turns the LED off entirely";
-
-    // Same treatment for the modifier itself: with the alarm disarmed there is
-    // nothing for it to modify, since the steady color is already all the LED
-    // does.
-    ledSteadyRocker.disabled = !ledAlarmOn;
-    ledSteadyRow.classList.toggle("control-row--off", !ledAlarmOn);
   }
 
   ledBrightness.addEventListener("input", () => {
@@ -407,9 +385,14 @@
   });
   ledBrightness.addEventListener("change", async () => {
     const v = Number(ledBrightness.value);
+    // 0 means different things either side of the alarm switch, and calling it
+    // "LED off" while the strobe is still armed would be a lie.
+    const alarmOn = document.getElementById("rocker-led-mode")
+      .getAttribute("aria-pressed") === "true";
     try {
       await postControl("/api/control/number/led_brightness", { value: v });
-      toast(v === 0 ? "LED off" : `LED brightness ${v}%`);
+      toast(v > 0 ? `LED brightness ${v}%`
+        : alarmOn ? "Dark between alarms — the strobe still fires" : "LED off");
     } catch (e) {
       toast("Couldn't send that — " + e.message);
     }
@@ -417,13 +400,8 @@
 
   wireLedRocker("rocker-led-mode", "led_alarm_mode",
     "Alarm mode — the strobe is armed",
-    "Indicator mode — steady color for the current air quality",
-    (on) => { ledAlarmOn = on; syncLedModeUi(); });
-
-  wireLedRocker("rocker-led-steady", "led_steady_in_alarm_mode",
-    "Color stays on between alarms",
-    "Dark between alarms",
-    (on) => { ledSteadyOn = on; syncLedModeUi(); });
+    "Alarm off — no strobe, whatever the readings",
+    syncLedBrightnessHelp);
 
   async function pressButton(objectId, sentMessage) {
     try {

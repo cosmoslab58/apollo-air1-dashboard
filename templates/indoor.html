@@ -177,9 +177,10 @@
           that are genuinely harmful to breathe. It always runs at full brightness, ignoring the
           brightness slider. VOC is excluded from it by default because a baseline-relative spike
           from cleaning spray or a new package is not an emergency. <strong>Alarm mode</strong>
-          below arms it; <strong>Color between alarms</strong> decides what the LED does the rest
-          of the time — dark, so that dark itself means nothing is wrong, or lit with the steady
-          color, so you can read the band without opening this page. The strobe wins either way.
+          below arms it, and nothing else changes it. What the LED does the rest of the time is
+          the <strong>Brightness</strong> slider's business alone: at 0 it stays dark, so dark
+          itself means nothing is wrong; above 0 it shows the steady color and you can read the
+          band without opening this page. The strobe ignores the slider either way.
         </p>
       </details>
     </div>
@@ -192,7 +193,7 @@
 
         <div class="control-card">
           <h3>Status LED</h3>
-          <div class="control-row" id="row-led-brightness">
+          <div class="control-row">
             <div class="control-label">
               <span class="cl-name">Brightness</span>
               <span class="cl-help" id="help-led-brightness">0 turns the LED off entirely</span>
@@ -206,16 +207,9 @@
           <div class="control-row">
             <div class="control-label">
               <span class="cl-name">Alarm mode</span>
-              <span class="cl-help">On: strobes when the air is dangerous. Off: steady color only, no strobe</span>
+              <span class="cl-help">Strobes when the air is dangerous, at full brightness. Independent of the slider — set it to 0 for an LED that only speaks up in an emergency</span>
             </div>
             <button class="rocker" id="rocker-led-mode" aria-pressed="false" aria-label="LED alarm mode"></button>
-          </div>
-          <div class="control-row" id="row-led-steady">
-            <div class="control-label">
-              <span class="cl-name">Color between alarms</span>
-              <span class="cl-help" id="help-led-steady">On: the steady color keeps running and the strobe layers over it. Off: dark until the strobe fires</span>
-            </div>
-            <button class="rocker" id="rocker-led-steady" aria-pressed="false" aria-label="Keep the steady color on in alarm mode"></button>
           </div>
         </div>
 
