@@ -88,6 +88,22 @@ def test_control_led_alarm_mode_is_accepted(client, monkeypatch):
     assert published == [("led_alarm_mode", True)]
 
 
+def test_control_led_steady_in_alarm_is_accepted(client, monkeypatch):
+    """The modifier that keeps the steady color lit under the alarm needs its own
+    allowlist entry -- and its object_id comes from the firmware entity's NAME
+    ("LED Steady In Alarm Mode"), not its yaml id, so a wrong guess here would
+    publish to a topic nothing subscribes to and fail silently."""
+    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    published = []
+    monkeypatch.setattr(
+        app_module.mqtt_bridge, "publish_switch",
+        lambda object_id, on: published.append((object_id, on)),
+    )
+    res = client.post("/api/control/switch/led_steady_in_alarm_mode", json={"state": True})
+    assert res.status_code == 200
+    assert published == [("led_steady_in_alarm_mode", True)]
+
+
 def test_control_switch_rejects_non_boolean_state(client, monkeypatch):
     monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
     res = client.post("/api/control/switch/led_alarm_mode", json={"state": "on"})

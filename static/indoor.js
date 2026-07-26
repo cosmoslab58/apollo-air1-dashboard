@@ -291,9 +291,11 @@
         bright.value = String(s.led_brightness);
         document.getElementById("val-led-brightness").textContent = String(Math.round(s.led_brightness));
       }
-      document.getElementById("rocker-led-mode")
-        .setAttribute("aria-pressed", String(!!s.led_alarm_mode));
-      syncLedBrightnessEnabled(!!s.led_alarm_mode);
+      ledAlarmOn = !!s.led_alarm_mode;
+      ledSteadyOn = !!s.led_steady_in_alarm;
+      document.getElementById("rocker-led-mode").setAttribute("aria-pressed", String(ledAlarmOn));
+      ledSteadyRocker.setAttribute("aria-pressed", String(ledSteadyOn));
+      syncLedModeUi();
 
       Object.entries(stepperConf).forEach(([key, conf]) => {
         const v = s[conf.stateKey];
@@ -370,17 +372,34 @@
   const ledBrightnessRow = document.getElementById("row-led-brightness");
   const ledBrightnessHelp = document.getElementById("help-led-brightness");
 
-  // The firmware ignores this slider entirely while alarm mode is on: the
-  // danger strobe is hardcoded to 100% so a stray drag can never dim an alarm
-  // to invisibility, and not even 0 silences it. A control that still looks
-  // live but does nothing is worse than one that is visibly out of play, so
-  // disable it and say why.
-  function syncLedBrightnessEnabled(alarmOn) {
-    ledBrightness.disabled = !!alarmOn;
-    ledBrightnessRow.classList.toggle("control-row--off", !!alarmOn);
-    ledBrightnessHelp.textContent = alarmOn
-      ? "Alarm mode runs the LED at 100% — brightness applies in indicator mode"
+  const ledSteadyRow = document.getElementById("row-led-steady");
+  const ledSteadyRocker = document.getElementById("rocker-led-steady");
+
+  // Two switches, three behaviours: alarm mode arms the strobe, and this one
+  // decides whether the steady color keeps running underneath it. Mirrored here
+  // rather than read back off the rockers, so an optimistic toggle and its
+  // rollback both re-derive the whole card from one place.
+  let ledAlarmOn = false;
+  let ledSteadyOn = false;
+
+  function syncLedModeUi() {
+    // The firmware ignores the brightness slider whenever there is no steady
+    // color for it to scale: the danger strobe is hardcoded to 100% so a stray
+    // drag can never dim an alarm to invisibility, and not even 0 silences it.
+    // A control that still looks live but does nothing is worse than one that
+    // is visibly out of play, so disable it and say why.
+    const brightnessDead = ledAlarmOn && !ledSteadyOn;
+    ledBrightness.disabled = brightnessDead;
+    ledBrightnessRow.classList.toggle("control-row--off", brightnessDead);
+    ledBrightnessHelp.textContent = brightnessDead
+      ? "The strobe always runs at 100% — brightness applies to the steady color"
       : "0 turns the LED off entirely";
+
+    // Same treatment for the modifier itself: with the alarm disarmed there is
+    // nothing for it to modify, since the steady color is already all the LED
+    // does.
+    ledSteadyRocker.disabled = !ledAlarmOn;
+    ledSteadyRow.classList.toggle("control-row--off", !ledAlarmOn);
   }
 
   ledBrightness.addEventListener("input", () => {
@@ -397,9 +416,14 @@
   });
 
   wireLedRocker("rocker-led-mode", "led_alarm_mode",
-    "Alarm mode — dark until the air is dangerous",
+    "Alarm mode — the strobe is armed",
     "Indicator mode — steady color for the current air quality",
-    syncLedBrightnessEnabled);
+    (on) => { ledAlarmOn = on; syncLedModeUi(); });
+
+  wireLedRocker("rocker-led-steady", "led_steady_in_alarm_mode",
+    "Color stays on between alarms",
+    "Dark between alarms",
+    (on) => { ledSteadyOn = on; syncLedModeUi(); });
 
   async function pressButton(objectId, sentMessage) {
     try {

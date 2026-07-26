@@ -27,6 +27,11 @@ PREVENT_SLEEP = "prevent_sleep"
 # silently -- publishes land on a topic nothing subscribes to.
 LED_BRIGHTNESS = "led_brightness"
 LED_ALARM_MODE = "led_alarm_mode"
+# Modifier for LED_ALARM_MODE, inert without it: on = keep the steady color lit
+# between alarms, so the strobe layers over an indicator instead of replacing
+# one. Added in firmware 1.1.14-mqtt; older firmware never publishes this topic
+# and the control reads as unavailable, which is the correct outcome.
+LED_STEADY_IN_ALARM = "led_steady_in_alarm_mode"
 SLEEP_DURATION = "sleep_duration"
 SEN55_TEMPERATURE_OFFSET = "sen55_temperature_offset"
 SEN55_HUMIDITY_OFFSET = "sen55_humidity_offset"
@@ -146,6 +151,7 @@ def get_state():
         "prevent_sleep": _val(snapshot, f"switch/{PREVENT_SLEEP}/state") == "ON",
         "led_brightness": _to_float(_val(snapshot, f"number/{LED_BRIGHTNESS}/state")),
         "led_alarm_mode": _val(snapshot, f"switch/{LED_ALARM_MODE}/state") == "ON",
+        "led_steady_in_alarm": _val(snapshot, f"switch/{LED_STEADY_IN_ALARM}/state") == "ON",
         "sleep_duration_min": _to_float(_val(snapshot, f"number/{SLEEP_DURATION}/state")),
         "sen55_temperature_offset": _to_float(_val(snapshot, f"number/{SEN55_TEMPERATURE_OFFSET}/state")),
         "sen55_humidity_offset": _to_float(_val(snapshot, f"number/{SEN55_HUMIDITY_OFFSET}/state")),
@@ -154,6 +160,7 @@ def get_state():
             "prevent_sleep": _seen(snapshot, f"switch/{PREVENT_SLEEP}/state"),
             "led_brightness": _seen(snapshot, f"number/{LED_BRIGHTNESS}/state"),
             "led_alarm_mode": _seen(snapshot, f"switch/{LED_ALARM_MODE}/state"),
+            "led_steady_in_alarm": _seen(snapshot, f"switch/{LED_STEADY_IN_ALARM}/state"),
             "sleep_duration_min": _seen(snapshot, f"number/{SLEEP_DURATION}/state"),
             "sen55_temperature_offset": _seen(snapshot, f"number/{SEN55_TEMPERATURE_OFFSET}/state"),
             "sen55_humidity_offset": _seen(snapshot, f"number/{SEN55_HUMIDITY_OFFSET}/state"),

@@ -176,8 +176,10 @@
           The strobe is a separate alarm that outranks every color above and only fires at levels
           that are genuinely harmful to breathe. It always runs at full brightness, ignoring the
           brightness slider. VOC is excluded from it by default because a baseline-relative spike
-          from cleaning spray or a new package is not an emergency. Switch between the steady
-          colors and the alarm with <strong>Alarm mode</strong> below — they are exclusive.
+          from cleaning spray or a new package is not an emergency. <strong>Alarm mode</strong>
+          below arms it; <strong>Color between alarms</strong> decides what the LED does the rest
+          of the time — dark, so that dark itself means nothing is wrong, or lit with the steady
+          color, so you can read the band without opening this page. The strobe wins either way.
         </p>
       </details>
     </div>
@@ -204,9 +206,16 @@
           <div class="control-row">
             <div class="control-label">
               <span class="cl-name">Alarm mode</span>
-              <span class="cl-help">On: dark until the air is dangerous, then strobes. Off: steady color for the current air quality</span>
+              <span class="cl-help">On: strobes when the air is dangerous. Off: steady color only, no strobe</span>
             </div>
             <button class="rocker" id="rocker-led-mode" aria-pressed="false" aria-label="LED alarm mode"></button>
+          </div>
+          <div class="control-row" id="row-led-steady">
+            <div class="control-label">
+              <span class="cl-name">Color between alarms</span>
+              <span class="cl-help" id="help-led-steady">On: the steady color keeps running and the strobe layers over it. Off: dark until the strobe fires</span>
+            </div>
+            <button class="rocker" id="rocker-led-steady" aria-pressed="false" aria-label="Keep the steady color on in alarm mode"></button>
           </div>
         </div>
 

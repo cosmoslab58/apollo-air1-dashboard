@@ -334,8 +334,9 @@
   /* A control the firmware is currently ignoring. Dimmed in place rather than
      hidden, so toggling alarm mode does not reflow the card and the help text
      stays visible to explain why the slider is out of play. */
-  .control-row--off .slider { opacity: 0.4; }
-  .control-row--off .slider input[type="range"] { cursor: not-allowed; }
+  .control-row--off .slider, .control-row--off .rocker { opacity: 0.4; }
+  .control-row--off .slider input[type="range"],
+  .control-row--off .rocker { cursor: not-allowed; }
   .control-row--off .cl-name { color: var(--ink-dim); }
 
   /* ---------- LED color key ----------
