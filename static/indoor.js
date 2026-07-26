@@ -274,14 +274,37 @@
     }
   }
 
+  // Rockers ship indeterminate (aria-pressed="mixed", disabled) and only become
+  // real controls once the device's state has actually been read. Rendering a
+  // confident "off" before then is a claim the page is in no position to make,
+  // and it reads identically to a device whose alarm really is off.
+  function setRocker(id, on) {
+    const el = document.getElementById(id);
+    el.setAttribute("aria-pressed", String(on));
+    el.disabled = false;
+  }
+
+  function showControlsProblem(detail) {
+    const note = document.getElementById("controls-status");
+    note.textContent = "Can't read the device's settings — " + detail;
+    note.hidden = false;
+  }
+
   async function loadControls() {
     try {
-      const res = await fetch("/api/controls");
-      if (!res.ok) throw new Error("request failed");
+      const res = await fetch("/api/controls", { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`the dashboard answered ${res.status}`);
+      // An expired Cloudflare Access session answers with a 200 HTML login
+      // page, not a 401 -- res.ok is true and res.json() then dies on "<".
+      // Without this check that lands in the catch below as an unexplained
+      // parse error, and every control silently keeps its pre-load default.
+      const type = res.headers.get("content-type") || "";
+      if (!type.includes("application/json")) {
+        throw new Error("something answered instead of the app; try signing in again");
+      }
       const s = await res.json();
 
-      const rocker = document.getElementById("rocker-sleep");
-      rocker.setAttribute("aria-pressed", String(!!s.prevent_sleep));
+      setRocker("rocker-sleep", !!s.prevent_sleep);
 
       // Don't fight the user mid-drag: only adopt the device's value when the
       // slider isn't focused, or a poll landing between drag and publish would
@@ -291,8 +314,7 @@
         bright.value = String(s.led_brightness);
         document.getElementById("val-led-brightness").textContent = String(Math.round(s.led_brightness));
       }
-      document.getElementById("rocker-led-mode")
-        .setAttribute("aria-pressed", String(!!s.led_alarm_mode));
+      setRocker("rocker-led-mode", !!s.led_alarm_mode);
       syncLedBrightnessHelp(!!s.led_alarm_mode);
 
       Object.entries(stepperConf).forEach(([key, conf]) => {
@@ -302,8 +324,17 @@
           document.getElementById("val-" + key).textContent = displayStepperValue(conf, v);
         }
       });
+      document.getElementById("controls-status").hidden = true;
     } catch (e) {
-      // Controls staying at their last-known display is preferable to blanking them out.
+      // Values already read stay put -- a dropped poll is no reason to blank a
+      // reading that was true a moment ago. What must not happen is failing
+      // silently: before this, an unreachable API left every control sitting at
+      // its markup default, which for the rockers meant a definite-looking
+      // "off" that outlived refreshes and looked exactly like a lost write.
+      console.error("controls read failed:", e);
+      // fetch() rejects with a bare TypeError for anything that never reached a
+      // server, whose message ("Failed to fetch") means nothing on a phone.
+      showControlsProblem(e instanceof TypeError ? "no connection to the dashboard" : e.message);
     }
   }
 

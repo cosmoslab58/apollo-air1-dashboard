@@ -188,6 +188,7 @@
     <div class="section">
       <div class="section-head">
         <span class="section-title">Setup</span>
+        <span class="section-note" id="controls-status" hidden></span>
       </div>
       <div class="control-groups">
 
@@ -209,7 +210,7 @@
               <span class="cl-name">Alarm mode</span>
               <span class="cl-help">Strobes when the air is dangerous, at full brightness. Independent of the slider — set it to 0 for an LED that only speaks up in an emergency</span>
             </div>
-            <button class="rocker" id="rocker-led-mode" aria-pressed="false" aria-label="LED alarm mode"></button>
+            <button class="rocker" id="rocker-led-mode" aria-pressed="mixed" disabled aria-label="LED alarm mode"></button>
           </div>
         </div>
 
@@ -220,7 +221,7 @@
               <span class="cl-name">Keep awake</span>
               <span class="cl-help">Stops the deep-sleep cycle — for OTA updates or debugging</span>
             </div>
-            <button class="rocker" id="rocker-sleep" aria-pressed="false" aria-label="Keep awake"></button>
+            <button class="rocker" id="rocker-sleep" aria-pressed="mixed" disabled aria-label="Keep awake"></button>
           </div>
           <div class="control-row">
             <div class="control-label">

@@ -309,6 +309,12 @@
   }
   .rocker[aria-pressed="true"]::after { transform: translateX(22px); background: var(--accent); border-color: var(--accent); }
   .rocker[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 50%, var(--hairline)); }
+  /* State not read yet. The knob sits between the two ends so it cannot be
+     mistaken for a definite off, and the control stays inert until the device
+     has actually answered -- tapping a switch whose position you can't see is
+     a coin flip about what you're asking for. */
+  .rocker[aria-pressed="mixed"] { opacity: 0.5; cursor: progress; }
+  .rocker[aria-pressed="mixed"]::after { transform: translateX(11px); }
 
   /* LED brightness. Same row furniture as .stepper so the two control types
      line up in the Setup card; the value readout reuses the stepper's mono
