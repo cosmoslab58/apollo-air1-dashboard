@@ -117,6 +117,18 @@ def available():
         return False
 
 
+def device_online():
+    """True when the AIR-1 itself is on the broker, per its birth/LWT status.
+
+    Distinct from available() above, which only says the *app* can reach the
+    broker. Controls need both: a command is published QoS 0 and non-retained
+    to a topic only the device subscribes to, so one sent while it is
+    disconnected is dropped there and then -- the broker does not hold it for
+    the device's return, and nothing ever replays it."""
+    with _lock:
+        return _state.get("status", {}).get("value") == "online"
+
+
 def _val(snapshot, suffix):
     entry = snapshot.get(suffix)
     return entry["value"] if entry else None

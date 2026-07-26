@@ -583,33 +583,44 @@ def api_controls():
 
 
 def _mqtt_unavailable_response():
-    """Shared 503 for the mutating control routes when the MQTT client never
-    came up (broker down at boot). Keeps them from dereferencing a None client
-    and 500ing with an AttributeError."""
-    if mqtt_bridge.available():
-        return None
-    return jsonify({"error": "device control is unavailable — MQTT broker not connected"}), 503
+    """Shared 503 for the mutating control routes when the command cannot land.
+
+    Two ways it can't. The broker may be unreachable from here (client never
+    came up, or the link dropped) -- checking that also keeps these routes from
+    dereferencing a None client and 500ing with an AttributeError.
+
+    Or the broker is fine and the AIR-1 is the one that's away. That case used
+    to return a hollow 200: commands go out QoS 0 and non-retained to a topic
+    only the device subscribes to, so one published while it is disconnected is
+    dropped at the broker and never replayed. The control would flip in the UI,
+    toast "Sent", and silently snap back on the next poll or refresh -- which
+    is exactly what a WiFi/broker dropout looked like from the sofa. Refusing
+    is the honest answer: nothing was sent, and nothing will be."""
+    if not mqtt_bridge.available():
+        return jsonify({"error": "device control is unavailable — MQTT broker not connected"}), 503
+    if not mqtt_bridge.device_online():
+        return jsonify({"error": "the AIR-1 isn't connected right now — nothing was sent"}), 503
+    return None
 
 
 @app.route("/api/control/switch/<object_id>", methods=["POST"])
 def api_control_switch(object_id):
-    unavailable = _mqtt_unavailable_response()
-    if unavailable:
-        return unavailable
     if object_id not in SWITCH_IDS:
         return jsonify({"error": "unknown switch"}), 404
     body = request.get_json(silent=True) or {}
     if not isinstance(body.get("state"), bool):
         return jsonify({"error": "state must be a boolean"}), 400
+    # Deliberately after validation: a bad object_id or payload is a bug in the
+    # caller and says so whether or not the device happens to be reachable.
+    unavailable = _mqtt_unavailable_response()
+    if unavailable:
+        return unavailable
     mqtt_bridge.publish_switch(object_id, body["state"])
     return jsonify({"published": True})
 
 
 @app.route("/api/control/number/<object_id>", methods=["POST"])
 def api_control_number(object_id):
-    unavailable = _mqtt_unavailable_response()
-    if unavailable:
-        return unavailable
     bounds = NUMBER_BOUNDS.get(object_id)
     if bounds is None:
         return jsonify({"error": "unknown number"}), 404
@@ -620,17 +631,20 @@ def api_control_number(object_id):
     lo, hi = bounds
     if not (lo <= value <= hi):
         return jsonify({"error": f"value must be between {lo} and {hi}"}), 400
+    unavailable = _mqtt_unavailable_response()
+    if unavailable:
+        return unavailable
     mqtt_bridge.publish_number(object_id, value)
     return jsonify({"published": True})
 
 
 @app.route("/api/control/button/<object_id>", methods=["POST"])
 def api_control_button(object_id):
+    if object_id not in BUTTON_IDS:
+        return jsonify({"error": "unknown button"}), 404
     unavailable = _mqtt_unavailable_response()
     if unavailable:
         return unavailable
-    if object_id not in BUTTON_IDS:
-        return jsonify({"error": "unknown button"}), 404
     mqtt_bridge.publish_button(object_id)
     return jsonify({"published": True})
 

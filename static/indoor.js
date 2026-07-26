@@ -322,6 +322,11 @@
         await postControl(`/api/control/number/${conf.object_id}`, { value: v });
         toast("Sent — applies next time the device wakes");
       } catch (e) {
+        // Put the step back. The optimistic bump is what makes the control feel
+        // instant, but leaving it up after a refused write shows a value the
+        // device never got -- the same lie the rockers roll back from.
+        stepperState[key] = base;
+        document.getElementById("val-" + key).textContent = displayStepperValue(conf, base);
         toast("Couldn't send that — " + e.message);
       }
     });

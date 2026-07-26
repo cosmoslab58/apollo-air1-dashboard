@@ -62,13 +62,42 @@ def test_forecast_purpleair_is_rejected_not_silently_airnow(client):
     assert "no forecast" in res.get_json()["error"].lower()
 
 
+def _reachable(monkeypatch, broker=True, device=True):
+    """Both links a control write needs. Set explicitly in every control test:
+    device_online() reads mqtt_bridge's module-global state, which other tests
+    in this file populate, so relying on the ambient value made these pass in a
+    full run and fail when the file was run alone."""
+    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: broker)
+    monkeypatch.setattr(app_module.mqtt_bridge, "device_online", lambda: device)
+
+
 def test_control_503_when_mqtt_unavailable(client, monkeypatch):
-    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: False)
+    _reachable(monkeypatch, broker=False)
     assert client.post("/api/control/button/esp_reboot").status_code == 503
 
 
-def test_control_unknown_switch_is_404(client, monkeypatch):
-    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+def test_control_503_when_device_is_offline(client, monkeypatch):
+    """The broker being reachable is not the same as the device being reachable.
+    Commands are QoS 0 and non-retained, so one published while the AIR-1 is
+    disconnected is dropped at the broker and never replayed -- returning 200
+    made the UI flip a control, toast "Sent", and silently snap back on the next
+    refresh."""
+    _reachable(monkeypatch, device=False)
+    published = []
+    monkeypatch.setattr(
+        app_module.mqtt_bridge, "publish_switch",
+        lambda object_id, on: published.append((object_id, on)),
+    )
+    res = client.post("/api/control/switch/led_alarm_mode", json={"state": True})
+    assert res.status_code == 503
+    assert "isn't connected" in res.get_json()["error"]
+    assert published == []
+
+
+def test_control_unknown_switch_is_404_even_when_offline(client, monkeypatch):
+    """Validation runs before the reachability check: an unknown object_id is a
+    bug in the caller either way, and a 503 would hide it."""
+    _reachable(monkeypatch, broker=False, device=False)
     res = client.post("/api/control/switch/nope", json={"state": True})
     assert res.status_code == 404
 
@@ -77,7 +106,7 @@ def test_control_led_alarm_mode_is_accepted(client, monkeypatch):
     """The mode toggle must be in the switch allowlist. Before this it held only
     prevent_sleep, so the control would have 404'd rather than reaching the
     device."""
-    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    _reachable(monkeypatch)
     published = []
     monkeypatch.setattr(
         app_module.mqtt_bridge, "publish_switch",
@@ -89,7 +118,7 @@ def test_control_led_alarm_mode_is_accepted(client, monkeypatch):
 
 
 def test_control_switch_rejects_non_boolean_state(client, monkeypatch):
-    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    _reachable(monkeypatch)
     res = client.post("/api/control/switch/led_alarm_mode", json={"state": "on"})
     assert res.status_code == 400
 
@@ -98,7 +127,7 @@ def test_led_brightness_accepts_full_range_including_zero(client, monkeypatch):
     """0 is the off position, so the bound has to start there -- upstream's
     number floors at 5, and reusing that would leave no way to turn the LED
     off from the dashboard."""
-    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    _reachable(monkeypatch)
     published = []
     monkeypatch.setattr(
         app_module.mqtt_bridge, "publish_number",
@@ -117,7 +146,7 @@ def test_led_brightness_accepts_full_range_including_zero(client, monkeypatch):
 
 
 def test_led_brightness_rejects_out_of_range(client, monkeypatch):
-    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    _reachable(monkeypatch)
     res = client.post(
         "/api/control/number/led_brightness", json={"value": 101}
     )
@@ -125,13 +154,13 @@ def test_led_brightness_rejects_out_of_range(client, monkeypatch):
 
 
 def test_control_number_out_of_bounds_is_400(client, monkeypatch):
-    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    _reachable(monkeypatch)
     res = client.post("/api/control/number/sleep_duration", json={"value": 99999})
     assert res.status_code == 400
 
 
 def test_control_number_rejects_non_number(client, monkeypatch):
-    monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: True)
+    _reachable(monkeypatch)
     res = client.post("/api/control/number/sleep_duration", json={"value": "abc"})
     assert res.status_code == 400
 
