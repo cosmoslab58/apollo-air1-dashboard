@@ -114,7 +114,7 @@
             </tr>
             <tr>
               <th scope="row"><span class="led-dot" style="--led:#ff8000"></span>Orange</th>
-              <td>≤ 150 <span class="lk-tag">Unhealthy — sensitive</span></td>
+              <td>≤ 150 <span class="lk-tag">Unhealthy&nbsp;— sensitive</span></td>
               <td>≤ 2000 <span class="lk-tag">Stuffy</span></td>
               <td>&lt; 250</td><td>&lt; 250</td>
             </tr>
@@ -147,36 +147,39 @@
           </tbody>
         </table>
       </div>
-      <p class="led-key-note">
-        <strong>Each channel is labelled in its own terms.</strong> The AQI words are EPA’s
-        legally defined categories for outdoor pollutants and are only accurate in that column —
-        EPA does not regulate indoor CO₂ at all, so the CO₂ column is labelled for ventilation
-        instead. The two Sensirion gas indices carry no category words and stop at purple: they
-        score against a learned ~72 h baseline, so they measure “different from recent normal”,
-        which is not a severity claim.
-      </p>
-      <p class="led-key-note">
-        <strong>“PM AQI” is the particulate-driven portion of an AQI, from the current
-        reading.</strong> A full EPA AQI is the worst of PM2.5, PM10, ozone, NO₂, SO₂ and CO;
-        this device measures only the two particulate channels, so on a high-ozone day the real
-        outdoor AQI is higher than this and nothing here would know. It is also not EPA’s
-        <em>NowCast</em> — that is a 12-hour weighted average, whereas this figure has no history
-        behind it and responds immediately.
-      </p>
-      <p class="led-key-note">
-        <strong>The CO₂ bands are a ventilation guide, not a health standard.</strong> No
-        government body publishes a severity scale for indoor CO₂. Only the ends are anchored:
-        800 ppm is CDC ventilation guidance, 1100 ppm the ASHRAE comfort range, and 5000 ppm the
-        OSHA permissible exposure limit — an 8-hour limit for healthy adult workers, which is not
-        the exposure pattern of a bedroom. The 2000 and 3500 boundaries are interpolation.
-      </p>
-      <p class="led-key-note">
-        The strobe is a separate alarm that outranks every colour above and only fires at levels
-        that are genuinely harmful to breathe. It always runs at full brightness, ignoring the
-        brightness slider. VOC is excluded from it by default because a baseline-relative spike
-        from cleaning spray or a new package is not an emergency. Switch between the steady
-        colours and the alarm with <strong>Alarm mode</strong> below — they are exclusive.
-      </p>
+      <details class="led-key-why">
+        <summary>How to read these bands — and what they don’t mean</summary>
+        <p class="led-key-note">
+          <strong>Each channel is labelled in its own terms.</strong> The AQI words are EPA’s
+          legally defined categories for outdoor pollutants and are only accurate in that column —
+          EPA does not regulate indoor CO₂ at all, so the CO₂ column is labelled for ventilation
+          instead. The two Sensirion gas indices carry no category words and stop at purple: they
+          score against a learned ~72 h baseline, so they measure “different from recent normal”,
+          which is not a severity claim.
+        </p>
+        <p class="led-key-note">
+          <strong>“PM AQI” is the particulate-driven portion of an AQI, from the current
+          reading.</strong> A full EPA AQI is the worst of PM2.5, PM10, ozone, NO₂, SO₂ and CO;
+          this device measures only the two particulate channels, so on a high-ozone day the real
+          outdoor AQI is higher than this and nothing here would know. It is also not EPA’s
+          <em>NowCast</em> — that is a 12-hour weighted average, whereas this figure has no history
+          behind it and responds immediately.
+        </p>
+        <p class="led-key-note">
+          <strong>The CO₂ bands are a ventilation guide, not a health standard.</strong> No
+          government body publishes a severity scale for indoor CO₂. Only the ends are anchored:
+          800 ppm is CDC ventilation guidance, 1100 ppm the ASHRAE comfort range, and 5000 ppm the
+          OSHA permissible exposure limit — an 8-hour limit for healthy adult workers, which is not
+          the exposure pattern of a bedroom. The 2000 and 3500 boundaries are interpolation.
+        </p>
+        <p class="led-key-note">
+          The strobe is a separate alarm that outranks every colour above and only fires at levels
+          that are genuinely harmful to breathe. It always runs at full brightness, ignoring the
+          brightness slider. VOC is excluded from it by default because a baseline-relative spike
+          from cleaning spray or a new package is not an emergency. Switch between the steady
+          colours and the alarm with <strong>Alarm mode</strong> below — they are exclusive.
+        </p>
+      </details>
     </div>
 
     <div class="section">

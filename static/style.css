@@ -372,6 +372,72 @@
   .led-key-alarm th, .led-key-alarm td { border-top: 1px solid var(--hairline); }
   .led-key-note { margin: 10px 2px 0; font-size: 0.8125rem; color: var(--ink-dim); }
 
+  /* The caveats under the key run to four paragraphs -- all of them worth
+     keeping, none of them worth reading twice. Folded away by default so the
+     table is the whole section until someone asks for the reasoning; a plain
+     <details> so it works with no JS and stays open across in-page taps. */
+  .led-key-why { margin-top: 14px; }
+  .led-key-why > summary {
+    cursor: pointer; list-style: none;
+    display: flex; align-items: center; gap: 9px;
+    padding: 11px 14px; border-radius: var(--radius);
+    border: 1px solid var(--hairline); background: var(--panel-raised);
+    font-size: 0.8125rem; font-weight: 600; color: var(--ink-dim);
+  }
+  .led-key-why > summary::-webkit-details-marker { display: none; }
+  /* Own chevron rather than the native marker, which can't be restyled to
+     match the rest of the app or animated on open. */
+  .led-key-why > summary::before {
+    content: ""; flex: none; width: 6px; height: 6px; margin-left: 1px;
+    border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg); transition: transform 160ms ease;
+  }
+  .led-key-why[open] > summary::before { transform: rotate(45deg); }
+  .led-key-why > summary:hover { background: var(--panel-sunken); color: var(--ink); }
+  .led-key-why[open] > summary { margin-bottom: 4px; }
+
+  /* Five channels of single-line cells come to ~745px, so on anything
+     narrower than a small tablet the key scrolled sideways and a phone only
+     ever saw two of the five columns -- useless for a table whose whole point
+     is comparing the columns. Below that width the cells stop being one line:
+     the category word drops under its threshold and the headings wrap, buying
+     the horizontal room back for a couple of rows of height so the whole key
+     lands on one screen. */
+  @media (max-width: 800px) {
+    .led-key { font-size: 0.75rem; }
+    .led-key caption { padding: 12px 10px 0; }
+    .led-key th, .led-key td { padding: 8px 6px; }
+    /* Only the words are allowed to wrap. The thresholds keep the base rule's
+       nowrap -- "< 150" split over two lines reads as two numbers -- and the
+       colour names are the row's label, where "Dim red" breaking in half
+       would cost more height than the width it saves. */
+    .led-key thead th { white-space: normal; }
+    .led-key th[scope="row"] { padding-left: 10px; }
+    .led-key .led-dot { margin-right: 6px; }
+    .led-key .lk-tag {
+      display: block; white-space: normal;
+      margin: 1px 0 0; font-size: 0.6875rem;
+    }
+  }
+  /* Phone tier. Five columns don't shrink any further by wrapping -- what's
+     left is the type itself -- so below the width where the app already
+     tightens its gutters the key drops a step in size to stay inside them,
+     and gets shorter at the same time. */
+  @media (max-width: 420px) {
+    .led-key { font-size: 0.6875rem; }
+    .led-key th, .led-key td { padding: 7px 4px; }
+    .led-key th[scope="row"] { padding-left: 8px; }
+    .led-key .led-dot { width: 10px; height: 10px; margin-right: 5px; }
+    .led-key .lk-tag { font-size: 0.625rem; }
+  }
+  /* Under the narrowest mainstream phone the five columns can no longer hold
+     whole words -- 360px is where "Occupational" stops fitting its column.
+     Breaking mid-word is ugly, so it is kept off every width that doesn't
+     need it, but it beats the key sliding off the edge of the screen. */
+  @media (max-width: 359px) {
+    .led-key .lk-tag { overflow-wrap: anywhere; }
+  }
+
   .stepper { display: flex; align-items: center; gap: 6px; flex: none; }
   .stepper button {
     width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--hairline); background: var(--panel-sunken);
