@@ -344,7 +344,12 @@
      so it has to match the hardware rather than adapt to light/dark. */
   .led-key th[scope="row"] { color: var(--ink); font-weight: 600; white-space: nowrap; }
   .led-key td.lk-na { color: var(--ink-dim); }
-  .led-key td { white-space: nowrap; }
+  /* Override the global right-aligned td. Elsewhere those cells are bare
+     figures where right alignment lines the digits up; here each one is a
+     threshold plus a category word of a different length, so right alignment
+     ragged the left edge and left every heading floating off to the side of
+     its own column. Both ends left-aligned puts each heading over its values. */
+  .led-key thead th, .led-key td { text-align: left; white-space: nowrap; }
   /* Per-channel category word sitting after the threshold. Body font, not the
      cell's mono, so it reads as a label rather than another figure -- the two
      lettered columns are labelled in different vocabularies on purpose. */
