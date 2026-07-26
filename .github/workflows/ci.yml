@@ -30,7 +30,7 @@ jobs:
         # Previously this job borrowed bodhi's pyenv 3.12 because
         # actions/setup-python has no prebuilt Python for Debian 13 -- an
         # ubuntu-latest-only problem, so the version now matches production.
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
