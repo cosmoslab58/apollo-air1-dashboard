@@ -51,12 +51,14 @@
     }).filter(Boolean).join("");
   }
 
-  // Google's per-population-group guidance -- more specific than AirNow's
-  // one paragraph for everyone. General population and children always
-  // show (kids react differently to air quality, and it's the group most
-  // likely to matter for this household); everyone else (elderly, lung
-  // disease, heart disease, athletes, pregnant) sits behind a toggle.
+  // Google's per-population-group guidance -- more specific than AirNow's one
+  // paragraph for everyone. Children come first: kids react differently to air
+  // quality and it's the group most likely to matter for this household, so
+  // their line sits in front of the toggle in the expanded layout; everyone
+  // else (elderly, lung disease, heart disease, athletes, pregnant) is behind
+  // it.
   const HEALTH_GROUP_LABELS = {
+    children: "Children",
     elderly: "Elderly",
     lungDiseasePopulation: "Lung disease",
     heartDiseasePopulation: "Heart disease",
@@ -64,18 +66,51 @@
     pregnantWomen: "Pregnant",
   };
 
-  function healthRecommendationsHtml(hr) {
+  // Within a single day Google hands back the identical sentence for several
+  // groups at once, and often reuses the general-population sentence verbatim
+  // as well. Merge groups that share wording onto one line, and drop the ones
+  // that only restate the general advice (which already leads the block), so
+  // what's left is the per-group differences rather than six near-copies.
+  function healthGroupLines(hr) {
+    const byText = new Map();
+    for (const [key, label] of Object.entries(HEALTH_GROUP_LABELS)) {
+      const text = hr[key];
+      if (!text || text === hr.generalPopulation) continue;
+      if (!byText.has(text)) byText.set(text, []);
+      byText.get(text).push(label);
+    }
+    return Array.from(byText, ([text, labels]) => ({ labels, text }));
+  }
+
+  function healthGroupLineHtml({ labels, text }) {
+    return `<p><strong>${labels.join(", ")}:</strong> ${escapeHtml(text)}</p>`;
+  }
+
+  // collapsed: fold the whole block behind one toggle. Used in the day cards,
+  // where several paragraphs per card -- boilerplate keyed to the AQI category,
+  // largely the same from day to day -- buried the numbers people came for. The
+  // shared block above the cards appears only once, so it stays open with just
+  // the sensitive-group lines folded away.
+  function healthRecommendationsHtml(hr, collapsed) {
     if (!hr || !hr.generalPopulation) return "";
-    const groups = Object.entries(HEALTH_GROUP_LABELS)
-      .filter(([key]) => hr[key])
-      .map(([key, label]) => `<p><strong>${label}:</strong> ${escapeHtml(hr[key])}</p>`)
-      .join("");
-    const childrenP = hr.children ? `<p><strong>Children:</strong> ${escapeHtml(hr.children)}</p>` : "";
+    const general = `<p class="health-guidance-text">${escapeHtml(hr.generalPopulation)}</p>`;
+    const lines = healthGroupLines(hr);
+    if (collapsed) {
+      return `<div class="health-guidance">
+        <button type="button" class="health-guidance-toggle" aria-expanded="false">Health advice</button>
+        <div class="health-guidance-groups" hidden>${general}${lines.map(healthGroupLineHtml).join("")}</div>
+      </div>`;
+    }
+    // Children lead when Google gave them advice that differs from the general
+    // paragraph (HEALTH_GROUP_LABELS order puts them first); rest go behind the
+    // toggle.
+    const lead = lines.length && lines[0].labels[0] === "Children"
+      ? healthGroupLineHtml(lines.shift()) : "";
     return `<div class="health-guidance">
-      <p class="health-guidance-text">${escapeHtml(hr.generalPopulation)}</p>
-      ${childrenP}
-      ${groups ? `<button type="button" class="health-guidance-toggle" aria-expanded="false">Guidance for sensitive groups</button>
-      <div class="health-guidance-groups" hidden>${groups}</div>` : ""}
+      ${general}
+      ${lead}
+      ${lines.length ? `<button type="button" class="health-guidance-toggle" aria-expanded="false">Guidance for sensitive groups</button>
+      <div class="health-guidance-groups" hidden>${lines.map(healthGroupLineHtml).join("")}</div>` : ""}
     </div>`;
   }
 
@@ -175,7 +210,7 @@
         <div class="fd-aqi">${aqiText}</div>
         ${dominantHtml}
         ${pollutantsBlock}
-        ${guidanceIsShared ? "" : healthRecommendationsHtml(day.health_recommendations)}
+        ${guidanceIsShared ? "" : healthRecommendationsHtml(day.health_recommendations, true)}
       </div>`;
     }).join("");
   }
