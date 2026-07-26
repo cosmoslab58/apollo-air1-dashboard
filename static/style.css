@@ -310,6 +310,27 @@
   .rocker[aria-pressed="true"]::after { transform: translateX(22px); background: var(--accent); border-color: var(--accent); }
   .rocker[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 50%, var(--hairline)); }
 
+  /* LED brightness. Same row furniture as .stepper so the two control types
+     line up in the Setup card; the value readout reuses the stepper's mono
+     tabular figures so digits do not jitter while dragging. */
+  .slider { display: flex; align-items: center; gap: 10px; flex: none; }
+  .slider input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 120px; height: 4px; border-radius: 2px; background: var(--hairline); cursor: pointer;
+  }
+  .slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px; border-radius: 50%; background: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--hairline)); cursor: pointer;
+  }
+  .slider input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--hairline)); cursor: pointer;
+  }
+  .slider .slider-value {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1rem;
+    min-width: 3.5ch; text-align: right;
+  }
   .stepper { display: flex; align-items: center; gap: 6px; flex: none; }
   .stepper button {
     width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--hairline); background: var(--panel-sunken);

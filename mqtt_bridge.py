@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 # Re-check after any firmware change that renames an entity — a renamed `name:`
 # silently changes the topic, and publishes to the old one just go nowhere.
 PREVENT_SLEEP = "prevent_sleep"
+# LED brightness doubles as the master: 0 % is off, so there is no separate
+# enable switch. LED_ALARM_MODE picks the behaviour -- on = dark until a reading
+# is dangerous then strobe, off = steady air-quality colour.
+LED_BRIGHTNESS = "air_quality_led_brightness"
+LED_ALARM_MODE = "led_alarm_mode"
 SLEEP_DURATION = "sleep_duration"
 SEN55_TEMPERATURE_OFFSET = "sen55_temperature_offset"
 SEN55_HUMIDITY_OFFSET = "sen55_humidity_offset"
@@ -135,12 +140,16 @@ def get_state():
         "online": _val(snapshot, "status") == "online",
         "status_seen_at": _seen(snapshot, "status"),
         "prevent_sleep": _val(snapshot, f"switch/{PREVENT_SLEEP}/state") == "ON",
+        "led_brightness": _to_float(_val(snapshot, f"number/{LED_BRIGHTNESS}/state")),
+        "led_alarm_mode": _val(snapshot, f"switch/{LED_ALARM_MODE}/state") == "ON",
         "sleep_duration_min": _to_float(_val(snapshot, f"number/{SLEEP_DURATION}/state")),
         "sen55_temperature_offset": _to_float(_val(snapshot, f"number/{SEN55_TEMPERATURE_OFFSET}/state")),
         "sen55_humidity_offset": _to_float(_val(snapshot, f"number/{SEN55_HUMIDITY_OFFSET}/state")),
         "dps310_pressure_offset": _to_float(_val(snapshot, f"number/{DPS310_PRESSURE_OFFSET}/state")),
         "seen_at": {
             "prevent_sleep": _seen(snapshot, f"switch/{PREVENT_SLEEP}/state"),
+            "led_brightness": _seen(snapshot, f"number/{LED_BRIGHTNESS}/state"),
+            "led_alarm_mode": _seen(snapshot, f"switch/{LED_ALARM_MODE}/state"),
             "sleep_duration_min": _seen(snapshot, f"number/{SLEEP_DURATION}/state"),
             "sen55_temperature_offset": _seen(snapshot, f"number/{SEN55_TEMPERATURE_OFFSET}/state"),
             "sen55_humidity_offset": _seen(snapshot, f"number/{SEN55_HUMIDITY_OFFSET}/state"),
