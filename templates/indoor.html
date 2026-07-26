@@ -93,7 +93,7 @@
           <thead>
             <tr>
               <th scope="col">LED</th>
-              <th scope="col">NowCast AQI</th>
+              <th scope="col">PM AQI</th>
               <th scope="col">CO₂ ppm</th>
               <th scope="col">VOC index</th>
               <th scope="col">NOx index</th>
@@ -154,6 +154,14 @@
         instead. The two Sensirion gas indices carry no category words and stop at purple: they
         score against a learned ~72 h baseline, so they measure “different from recent normal”,
         which is not a severity claim.
+      </p>
+      <p class="led-key-note">
+        <strong>“PM AQI” is the particulate-driven portion of an AQI, from the current
+        reading.</strong> A full EPA AQI is the worst of PM2.5, PM10, ozone, NO₂, SO₂ and CO;
+        this device measures only the two particulate channels, so on a high-ozone day the real
+        outdoor AQI is higher than this and nothing here would know. It is also not EPA’s
+        <em>NowCast</em> — that is a 12-hour weighted average, whereas this figure has no history
+        behind it and responds immediately.
       </p>
       <p class="led-key-note">
         <strong>The CO₂ bands are a ventilation guide, not a health standard.</strong> No
