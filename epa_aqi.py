@@ -42,6 +42,29 @@ def ugm3_to_ppb(parameter, ugm3):
     return ugm3 * 24.45 / mw
 
 
+def epa_value(parameter, value, units=None):
+    """Normalize a reported concentration into the unit that parameter's
+    breakpoint table expects: µg/m³ for particulates, ppb for O3/NO2/SO2,
+    ppm for CO. `units` is the provider's unit string ("PARTS_PER_BILLION" /
+    "MICROGRAMS_PER_CUBIC_METER"); anything other than µg/m³ is taken as
+    already-ppb, matching how the providers actually report.
+
+    The Python twin of static/aqi.js's aqiEpaValue (tests/test_aqi_parity
+    checks the two agree). Every caller of aqi_from_concentration must route
+    through this -- CO especially, whose table is in ppm while every provider
+    reports it in ppb or µg/m³: skipping the conversion inflates CO's
+    sub-index ~1000x and makes it the dominant pollutant every time.
+    """
+    if value is None:
+        return None
+    if parameter in ("PM2.5", "PM10"):
+        return value  # µg/m³ already, whatever the units string says
+    ppb = ugm3_to_ppb(parameter, value) if units == "MICROGRAMS_PER_CUBIC_METER" else value
+    if ppb is None:
+        return None
+    return ppb / 1000 if parameter == "CO" else ppb
+
+
 def aqi_from_concentration(parameter, value):
     """value must already be in EPA's unit for the parameter (µg/m³ for
     PM2.5/PM10, ppb for O3/NO2/SO2, ppm for CO). Returns the EPA AQI number

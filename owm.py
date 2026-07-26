@@ -55,15 +55,9 @@ _forecast_cache = aq_shared.TTLCache(FORECAST_CACHE_TTL_S)  # keyed by (lat, lon
 
 def _epa_value(parameter, ugm3):
     """Convert an OWM µg/m³ reading into the unit EPA's breakpoint table
-    for that parameter expects."""
-    if ugm3 is None:
-        return None
-    if parameter in ("PM2.5", "PM10"):
-        return ugm3
-    ppb = epa_aqi.ugm3_to_ppb(parameter, ugm3)
-    if parameter == "CO":
-        return ppb / 1000 if ppb is not None else None  # EPA's CO table is ppm
-    return ppb
+    for that parameter expects. OWM reports every component in µg/m³, so this
+    is just the shared normalizer pinned to that unit."""
+    return epa_aqi.epa_value(parameter, ugm3, "MICROGRAMS_PER_CUBIC_METER")
 
 
 def _aqi_for(parameter, ugm3):

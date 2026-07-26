@@ -110,10 +110,16 @@ def dominant_from_pollutants(pollutants):
     """Which pollutant drives the reading, by recomputing each one's AQI from
     its concentration and taking the worst -- the same worst-of pattern
     already used by google_aq._recomputed_aqi / owm._forecast_aqi_dominant /
-    purpleair._worst_pm_aqi. Returns None when no pollutant converts."""
+    purpleair._worst_pm_aqi. Concentrations go through epa_aqi.epa_value
+    first: the rows carry each provider's own units (ppb gases from Google,
+    µg/m³-converted-to-ppb from OWM), and EPA's CO table is in ppm, so
+    comparing raw values would hand CO the win on every reading.
+    Returns None when no pollutant converts."""
     best = None
     for p in pollutants:
-        aqi = epa_aqi.aqi_from_concentration(p["parameter"], p["concentration_value"])
+        parameter = p["parameter"]
+        value = epa_aqi.epa_value(parameter, p["concentration_value"], p.get("concentration_units"))
+        aqi = epa_aqi.aqi_from_concentration(parameter, value)
         if aqi is not None and (best is None or aqi > best[0]):
             best = (aqi, p["parameter"])
     return best[1] if best else None

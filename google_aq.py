@@ -62,9 +62,12 @@ def _recomputed_aqi(raw_pollutants):
         value = concentration.get("value")
         if value is None:
             continue
-        if parameter == "CO" and concentration.get("units") == "PARTS_PER_BILLION":
-            value = value / 1000  # epa_aqi's CO breakpoints are in ppm
-        aqi = epa_aqi.aqi_from_concentration(parameter, value)
+        # Google reports gases in ppb and particulates in µg/m³; the shared
+        # normalizer maps either onto EPA's own unit for the parameter (ppm
+        # for CO, notably).
+        aqi = epa_aqi.aqi_from_concentration(
+            parameter, epa_aqi.epa_value(parameter, value, concentration.get("units"))
+        )
         if aqi is not None and (best is None or aqi > best[0]):
             best = (aqi, parameter)
     if best is None:

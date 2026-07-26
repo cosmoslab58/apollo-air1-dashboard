@@ -69,3 +69,17 @@ def test_ugm3_to_ppb():
     assert epa_aqi.ugm3_to_ppb("O3", 48.0) == 24.45
     assert epa_aqi.ugm3_to_ppb("O3", None) is None
     assert epa_aqi.ugm3_to_ppb("NH3-unknown", 10) is None
+
+
+def test_epa_value_normalizes_provider_units():
+    # Particulates pass through as reported (already the table's µg/m³).
+    assert epa_aqi.epa_value("PM2.5", 12.0, "MICROGRAMS_PER_CUBIC_METER") == 12.0
+    # ppb gases pass through; µg/m³ gases convert.
+    assert epa_aqi.epa_value("O3", 60.0, "PARTS_PER_BILLION") == 60.0
+    assert epa_aqi.epa_value("O3", 48.0, "MICROGRAMS_PER_CUBIC_METER") == 24.45
+    # CO is the trap: its table is ppm, both provider units are 1000x bigger.
+    assert epa_aqi.epa_value("CO", 210.0, "PARTS_PER_BILLION") == 0.21
+    assert round(epa_aqi.epa_value("CO", 229.14, "MICROGRAMS_PER_CUBIC_METER"), 3) == 0.2
+    assert epa_aqi.epa_value("CO", None, "PARTS_PER_BILLION") is None
+    assert epa_aqi.epa_value("NH3", 10.0, "MICROGRAMS_PER_CUBIC_METER")  # no breakpoints, still converts
+    assert epa_aqi.epa_value("Unknown", 10.0, "MICROGRAMS_PER_CUBIC_METER") is None

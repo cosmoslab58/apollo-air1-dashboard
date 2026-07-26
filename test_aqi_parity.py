@@ -35,16 +35,13 @@ def test_breakpoint_tables_match():
 
 
 def _py_aqi(parameter, value, units):
-    """Mirror aqi.js's aqiEpaValue unit handling, then run the shared Python
-    interpolation, so the two are compared on identical inputs."""
-    if parameter in ("PM2.5", "PM10"):
-        epa_value = value
-    elif units == "MICROGRAMS_PER_CUBIC_METER":
-        ppb = epa_aqi.ugm3_to_ppb(parameter, value)
-        epa_value = ppb / 1000 if parameter == "CO" else ppb
-    else:  # already ppb
-        epa_value = value / 1000 if parameter == "CO" else value
-    return epa_aqi.aqi_from_concentration(parameter, epa_value)
+    """The Python side of the comparison: the shared unit normalizer plus the
+    shared interpolation, so the two languages are compared on identical
+    inputs. Deliberately calls epa_aqi.epa_value rather than re-deriving the
+    unit handling here -- a local copy would keep passing while production
+    code skipped the conversion (which is exactly how the Away dominant-
+    pollutant CO bug survived this test)."""
+    return epa_aqi.aqi_from_concentration(parameter, epa_aqi.epa_value(parameter, value, units))
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")

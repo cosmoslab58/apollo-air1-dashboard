@@ -26,6 +26,19 @@ def test_dominant_from_pollutants_picks_worst_aqi():
     assert aq_shared.dominant_from_pollutants(pollutants) == "PM2.5"
 
 
+def test_dominant_from_pollutants_converts_co_ppb_to_ppm():
+    """Regression: EPA's CO breakpoints are ppm but every provider reports CO
+    in ppb, so an ordinary ~200 ppb reading used to be read as 200 ppm --
+    off the end of a table that stops at 15.4 -- clamping to AQI 500 and
+    making CO the "Driven by" pollutant on every Away reading."""
+    pollutants = [
+        {"parameter": "PM2.5", "concentration_value": 12.0, "concentration_units": "MICROGRAMS_PER_CUBIC_METER"},
+        {"parameter": "O3", "concentration_value": 60.0, "concentration_units": "PARTS_PER_BILLION"},
+        {"parameter": "CO", "concentration_value": 210.0, "concentration_units": "PARTS_PER_BILLION"},
+    ]
+    assert aq_shared.dominant_from_pollutants(pollutants) == "O3"
+
+
 def test_dominant_from_pollutants_empty_is_none():
     assert aq_shared.dominant_from_pollutants([]) is None
 
