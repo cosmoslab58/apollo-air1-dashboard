@@ -344,6 +344,14 @@
      so it has to match the hardware rather than adapt to light/dark. */
   .led-key th[scope="row"] { color: var(--ink); font-weight: 600; white-space: nowrap; }
   .led-key td.lk-na { color: var(--ink-dim); }
+  .led-key td { white-space: nowrap; }
+  /* Per-channel category word sitting after the threshold. Body font, not the
+     cell's mono, so it reads as a label rather than another figure -- the two
+     lettered columns are labelled in different vocabularies on purpose. */
+  .led-key .lk-tag {
+    font-family: var(--font-body); font-weight: 500; font-size: 0.75rem;
+    color: var(--ink-dim); margin-left: 7px;
+  }
   .led-dot {
     display: inline-block; width: 12px; height: 12px; border-radius: 50%;
     margin-right: 9px; vertical-align: -1px; background: var(--led);
