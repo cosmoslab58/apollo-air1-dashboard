@@ -293,6 +293,7 @@
       }
       document.getElementById("rocker-led-mode")
         .setAttribute("aria-pressed", String(!!s.led_alarm_mode));
+      syncLedBrightnessEnabled(!!s.led_alarm_mode);
 
       Object.entries(stepperConf).forEach(([key, conf]) => {
         const v = s[conf.stateKey];
@@ -344,16 +345,18 @@
   // Both LED toggles follow the prevent_sleep pattern: flip optimistically so
   // the control feels immediate, revert on failure. The device applies these
   // straight away rather than at next wake, since it is mains-powered.
-  function wireLedRocker(elementId, objectId, onMessage, offMessage) {
+  function wireLedRocker(elementId, objectId, onMessage, offMessage, onToggle) {
     const el = document.getElementById(elementId);
     el.addEventListener("click", async () => {
       const on = el.getAttribute("aria-pressed") !== "true";
       el.setAttribute("aria-pressed", String(on));
+      if (onToggle) onToggle(on);
       try {
         await postControl(`/api/control/switch/${objectId}`, { state: on });
         toast(on ? onMessage : offMessage);
       } catch (e) {
         el.setAttribute("aria-pressed", String(!on));
+        if (onToggle) onToggle(!on);
         toast("Couldn't send that — " + e.message);
       }
     });
@@ -364,6 +367,22 @@
   // the handle live so the control feels responsive.
   const ledBrightness = document.getElementById("led-brightness");
   const ledBrightnessLabel = document.getElementById("val-led-brightness");
+  const ledBrightnessRow = document.getElementById("row-led-brightness");
+  const ledBrightnessHelp = document.getElementById("help-led-brightness");
+
+  // The firmware ignores this slider entirely while alarm mode is on: the
+  // danger strobe is hardcoded to 100% so a stray drag can never dim an alarm
+  // to invisibility, and not even 0 silences it. A control that still looks
+  // live but does nothing is worse than one that is visibly out of play, so
+  // disable it and say why.
+  function syncLedBrightnessEnabled(alarmOn) {
+    ledBrightness.disabled = !!alarmOn;
+    ledBrightnessRow.classList.toggle("control-row--off", !!alarmOn);
+    ledBrightnessHelp.textContent = alarmOn
+      ? "Alarm mode runs the LED at 100% — brightness applies in indicator mode"
+      : "0 turns the LED off entirely";
+  }
+
   ledBrightness.addEventListener("input", () => {
     ledBrightnessLabel.textContent = ledBrightness.value;
   });
@@ -379,7 +398,8 @@
 
   wireLedRocker("rocker-led-mode", "led_alarm_mode",
     "Alarm mode — dark until the air is dangerous",
-    "Indicator mode — steady colour for the current air quality");
+    "Indicator mode — steady colour for the current air quality",
+    syncLedBrightnessEnabled);
 
   async function pressButton(objectId, sentMessage) {
     try {

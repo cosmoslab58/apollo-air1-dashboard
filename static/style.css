@@ -331,6 +331,34 @@
     font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1rem;
     min-width: 3.5ch; text-align: right;
   }
+  /* A control the firmware is currently ignoring. Dimmed in place rather than
+     hidden, so toggling alarm mode does not reflow the card and the help text
+     stays visible to explain why the slider is out of play. */
+  .control-row--off .slider { opacity: 0.4; }
+  .control-row--off .slider input[type="range"] { cursor: not-allowed; }
+  .control-row--off .cl-name { color: var(--ink-dim); }
+
+  /* ---------- LED colour key ----------
+     Swatches carry the LED's literal RGB, deliberately NOT the theme's
+     semantic tokens: the table answers "what is that colour on the device",
+     so it has to match the hardware rather than adapt to light/dark. */
+  .led-key th[scope="row"] { color: var(--ink); font-weight: 600; white-space: nowrap; }
+  .led-key td.lk-na { color: var(--ink-dim); }
+  .led-dot {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    margin-right: 9px; vertical-align: -1px; background: var(--led);
+    box-shadow: 0 0 7px var(--led), inset 0 0 2px rgba(255, 255, 255, 0.45);
+  }
+  /* Hazardous is a dimmed red on the device, not a distinct hue -- ESPHome
+     normalises RGB so a "dark red" renders identical to plain red. */
+  .led-dot--dim { opacity: 0.45; box-shadow: 0 0 4px var(--led); }
+  .led-dot--strobe {
+    background: conic-gradient(#ff0000, #ffffff, #0064ff, #ffaa00, #ff00d0, #ff0000);
+    box-shadow: 0 0 7px rgba(255, 90, 90, 0.75);
+  }
+  .led-key-alarm th, .led-key-alarm td { border-top: 1px solid var(--hairline); }
+  .led-key-note { margin: 10px 2px 0; font-size: 0.8125rem; color: var(--ink-dim); }
+
   .stepper { display: flex; align-items: center; gap: 6px; flex: none; }
   .stepper button {
     width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--hairline); background: var(--panel-sunken);

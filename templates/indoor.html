@@ -84,16 +84,82 @@
 
     <div class="section">
       <div class="section-head">
+        <span class="section-title">LED colour key</span>
+        <span class="section-note">Indicator mode shows the worst band across all four channels</span>
+      </div>
+      <div class="table-wrap">
+        <table class="led-key">
+          <caption>What the status LED is telling you</caption>
+          <thead>
+            <tr>
+              <th scope="col">LED</th>
+              <th scope="col">NowCast AQI</th>
+              <th scope="col">CO₂ ppm</th>
+              <th scope="col">VOC index</th>
+              <th scope="col">NOx index</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row"><span class="led-dot" style="--led:#00e000"></span>Good</th>
+              <td>≤ 50</td><td>≤ 800</td><td>&lt; 80</td><td>&lt; 20</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="led-dot" style="--led:#ffff00"></span>Moderate</th>
+              <td>≤ 100</td><td>≤ 1000</td><td>&lt; 150</td><td>&lt; 150</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="led-dot" style="--led:#ff8000"></span>Unhealthy — sensitive</th>
+              <td>≤ 150</td><td>≤ 1500</td><td>&lt; 250</td><td>&lt; 250</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="led-dot" style="--led:#ff0000"></span>Unhealthy</th>
+              <td>≤ 200</td><td>≤ 2000</td><td>&lt; 400</td><td>&lt; 400</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="led-dot" style="--led:#9900ff"></span>Very unhealthy</th>
+              <td>≤ 300</td><td>≤ 2500</td><td>≥ 400</td><td>≥ 400</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="led-dot led-dot--dim" style="--led:#ff0000"></span>Hazardous</th>
+              <td>&gt; 300</td><td>&gt; 2500</td><td class="lk-na">—</td><td class="lk-na">—</td>
+            </tr>
+          </tbody>
+          <tbody class="led-key-alarm">
+            <tr>
+              <th scope="row"><span class="led-dot led-dot--strobe"></span>Danger — strobing</th>
+              <td>≥ 200</td><td>≥ 5000</td><td class="lk-na">off</td><td class="lk-na">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="led-key-note">
+        The two Sensirion gas indices stop at <em>Very unhealthy</em>. They score against a
+        learned ~72 h baseline, so they measure “different from recent normal”, not “harmful” —
+        which is not a claim that earns the top band. Only AQI and CO₂ can drive the LED to
+        <em>Hazardous</em>, and <em>Hazardous</em> is a dimmed red rather than its own hue.
+      </p>
+      <p class="led-key-note">
+        The strobe is a separate alarm that outranks every colour above and only fires at levels
+        that are genuinely harmful to breathe. It always runs at full brightness, ignoring the
+        brightness slider. VOC is excluded from it by default because a baseline-relative spike
+        from cleaning spray or a new package is not an emergency. Switch between the steady
+        colours and the alarm with <strong>Alarm mode</strong> below — they are exclusive.
+      </p>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
         <span class="section-title">Setup</span>
       </div>
       <div class="control-groups">
 
         <div class="control-card">
           <h3>Status LED</h3>
-          <div class="control-row">
+          <div class="control-row" id="row-led-brightness">
             <div class="control-label">
               <span class="cl-name">Brightness</span>
-              <span class="cl-help">0 turns the LED off entirely</span>
+              <span class="cl-help" id="help-led-brightness">0 turns the LED off entirely</span>
             </div>
             <div class="slider">
               <input type="range" id="led-brightness" min="0" max="100" step="1" value="100"
