@@ -398,7 +398,7 @@
 
   wireLedRocker("rocker-led-mode", "led_alarm_mode",
     "Alarm mode — dark until the air is dangerous",
-    "Indicator mode — steady colour for the current air quality",
+    "Indicator mode — steady color for the current air quality",
     syncLedBrightnessEnabled);
 
   async function pressButton(objectId, sentMessage) {

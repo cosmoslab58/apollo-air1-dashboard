@@ -338,9 +338,9 @@
   .control-row--off .slider input[type="range"] { cursor: not-allowed; }
   .control-row--off .cl-name { color: var(--ink-dim); }
 
-  /* ---------- LED colour key ----------
+  /* ---------- LED color key ----------
      Swatches carry the LED's literal RGB, deliberately NOT the theme's
-     semantic tokens: the table answers "what is that colour on the device",
+     semantic tokens: the table answers "what is that color on the device",
      so it has to match the hardware rather than adapt to light/dark. */
   .led-key th[scope="row"] { color: var(--ink); font-weight: 600; white-space: nowrap; }
   .led-key td.lk-na { color: var(--ink-dim); }
@@ -409,7 +409,7 @@
     .led-key th, .led-key td { padding: 8px 6px; }
     /* Only the words are allowed to wrap. The thresholds keep the base rule's
        nowrap -- "< 150" split over two lines reads as two numbers -- and the
-       colour names are the row's label, where "Dim red" breaking in half
+       color names are the row's label, where "Dim red" breaking in half
        would cost more height than the width it saves. */
     .led-key thead th { white-space: normal; }
     .led-key th[scope="row"] { padding-left: 10px; }
