@@ -143,13 +143,20 @@ def _forecast_pollutants(components):
 
 def _forecast_aqi_dominant(components):
     """Worst EPA AQI across a forecast hour's components -> (aqi, dominant),
-    or None. Same worst-of-all logic as the stored current reading."""
-    candidates = [
-        (_aqi_for(parameter, components.get(key)), parameter)
-        for key, parameter in FORECAST_COMPONENTS
-    ]
-    candidates = [(a, p) for a, p in candidates if a is not None]
-    return max(candidates) if candidates else None
+    or None. Same worst-of-all logic as the stored current reading.
+
+    Ties keep the first component in FORECAST_COMPONENTS order (PM2.5 first),
+    matching google_aq._recomputed_aqi and aq_shared.dominant_from_pollutants.
+    A max() over (aqi, parameter) tuples would instead fall through to
+    comparing the parameter *name*, so a clean day where several sub-indices
+    round to the same low number reported the alphabetically-last pollutant
+    ("Driven by SO2") while every other provider said PM2.5."""
+    best = None
+    for key, parameter in FORECAST_COMPONENTS:
+        aqi = _aqi_for(parameter, components.get(key))
+        if aqi is not None and (best is None or aqi > best[0]):
+            best = (aqi, parameter)
+    return best
 
 
 def _forecast_date(point):

@@ -61,6 +61,22 @@ def test_google_health_key_present_when_absent(monkeypatch):
     assert obs["health_recommendations"] is None
 
 
+def test_owm_forecast_dominant_breaks_ties_by_component_order():
+    """Regression: a max() over (aqi, parameter) tuples fell through to
+    comparing the parameter *name* on a tie, so a clean day where several
+    sub-indices round to the same low number reported the alphabetically-last
+    pollutant ("Driven by SO2"). Ties keep FORECAST_COMPONENTS order (PM2.5
+    first), matching every other provider's worst-of."""
+    # 0.9 µg/m³ PM2.5 and 9.2 µg/m³ SO2 both compute to AQI 5.
+    components = {"pm2_5": 0.9, "pm10": 0.0, "o3": 0.0, "no2": 0.0, "so2": 9.2, "co": 0.0}
+    assert owm._aqi_for("PM2.5", 0.9) == owm._aqi_for("SO2", 9.2)  # the tie itself
+    assert owm._forecast_aqi_dominant(components) == (5, "PM2.5")
+
+
+def test_owm_forecast_dominant_none_when_nothing_converts():
+    assert owm._forecast_aqi_dominant({}) is None
+
+
 def test_missing_row_returns_none(monkeypatch):
     monkeypatch.setattr(influx, "query_owm_latest", lambda: None)
     assert owm.get_current_observation() is None

@@ -74,11 +74,17 @@ def _fetch(zip_code):
     if not readings:
         return None
 
-    dominant = max(readings, key=lambda r: r["AQI"])
+    # AQI is -1 on readings AirNow hasn't computed a number for -- same
+    # sentinel the forecast endpoint uses (see _fetch_forecast). Rank by
+    # Category.Number first so an uncomputed row never outranks a real one,
+    # and surface the AQI as None rather than passing -1 through, which
+    # band_for_aqi would otherwise read as a healthy "good".
+    dominant = max(readings, key=lambda r: (r["Category"]["Number"], r["AQI"]))
+    dominant_aqi = dominant["AQI"] if dominant["AQI"] and dominant["AQI"] > 0 else None
     return {
-        "aqi": dominant["AQI"],
+        "aqi": dominant_aqi,
         "category": dominant["Category"]["Name"],
-        "band": band_for_aqi(dominant["AQI"]),
+        "band": band_for_aqi(dominant_aqi) if dominant_aqi else band_for_category(dominant["Category"]["Number"]),
         "dominant_pollutant": dominant["ParameterName"],
         "reporting_area": _format_reporting_area(dominant["ReportingArea"], dominant["StateCode"]),
         "lat": dominant.get("Latitude"),
@@ -87,7 +93,7 @@ def _fetch(zip_code):
         "pollutants": [
             {
                 "parameter": r["ParameterName"],
-                "aqi": r["AQI"],
+                "aqi": r["AQI"] if r["AQI"] and r["AQI"] > 0 else None,
                 "category": r["Category"]["Name"],
             }
             for r in readings

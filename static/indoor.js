@@ -221,12 +221,20 @@
   // without a network round-trip.
   let lastInsidePoints = null, lastInsideRangeLabel = "";
 
+  // Wrapped like every other loader here: this runs on a 60s poll, so a
+  // phone that drops Wi-Fi would otherwise throw an unhandled rejection once
+  // a minute. On failure the charts keep their last-rendered points rather
+  // than being blanked -- stale data beats an empty page.
   async function loadHistory(hours) {
-    const res = await fetch(`/api/history?hours=${hours}`);
-    const points = res.ok ? await res.json() : [];
-    lastInsidePoints = points;
-    lastInsideRangeLabel = rangeLabelFor(hours);
-    renderInsideCharts(points, lastInsideRangeLabel);
+    try {
+      const res = await fetch(`/api/history?hours=${hours}`);
+      const points = res.ok ? await res.json() : [];
+      lastInsidePoints = points;
+      lastInsideRangeLabel = rangeLabelFor(hours);
+      renderInsideCharts(points, lastInsideRangeLabel);
+    } catch (e) {
+      // Keep whatever is already on screen.
+    }
   }
 
   let resizeTimer = null;

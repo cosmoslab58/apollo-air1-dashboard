@@ -7,32 +7,9 @@
   // aqiFromConcentration from aqi.js (both loaded first). Theme toggle, readout
   // toggle, settings panel, clock, and SW registration self-init in common.js.
 
-  /* ---------- temperature unit (F/C) ---------- */
-  let currentUnit = localStorage.getItem("apollo-air1-unit") || "f";
-
-  function tempUnitLabel() {
-    return currentUnit === "f" ? "°F" : "°C";
-  }
-  // Absolute reading: F = C * 9/5 + 32.
-  function displayTemp(celsius) {
-    return typeof celsius === "number" ? (currentUnit === "f" ? celsius * 9 / 5 + 32 : celsius) : null;
-  }
-
-  function renderUnitToggle() {
-    document.querySelectorAll(".unit-toggle").forEach((wrap) => {
-      wrap.querySelectorAll("button").forEach((btn) => {
-        btn.setAttribute("aria-pressed", String(btn.getAttribute("data-unit") === currentUnit));
-      });
-    });
-  }
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest(".unit-toggle button");
-    if (!btn) return;
-    currentUnit = btn.getAttribute("data-unit");
-    localStorage.setItem("apollo-air1-unit", currentUnit);
-    renderUnitToggle();
-    loadLatest();
-  });
+  // No temperature-unit (°F/°C) handling here, unlike indoor.js/technical.js:
+  // Overview renders no temperature at all, so index.html hides that settings
+  // row (show_units_row) and this page has nothing to convert or re-render.
 
   const BAND_ORDER = ["good", "fair", "poor", "bad"];
 
@@ -300,7 +277,6 @@
   /* ---------- init ---------- */
   updateForecastLink();
   fetchAwayLoc().then(updateForecastLink);
-  renderUnitToggle();
   loadLatest();
   loadOutside();
   loadBasicSparks();

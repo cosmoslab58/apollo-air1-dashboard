@@ -302,7 +302,7 @@
         band = bandFromAqi(aqi);
       }
       const colorStyle = band ? ` style="color: ${bandVar(band)}"` : "";
-      return `<span class="outside-pollutant">${p.parameter}<span class="op-value"${colorStyle}>${valueHtml}</span></span>`;
+      return `<span class="outside-pollutant">${escapeHtml(p.parameter)}<span class="op-value"${colorStyle}>${valueHtml}</span></span>`;
     }).filter(Boolean).join("");
   }
 

@@ -5,7 +5,10 @@
 <body>
 
 {% set show_away_mode = true %}
-{% set show_units_row = true %}
+{# No temperature is rendered on Overview (the racks are PM2.5/PM10/CO2/VOC
+   and pollutants) -- the °F/°C row would be a control that changes nothing.
+   Indoor and Outdoor, which do chart temperature, still show it. #}
+{% set show_units_row = false %}
 {% include "_partials/chrome_header.html" %}
 
 <div class="wrap wrap--provider-bar">
