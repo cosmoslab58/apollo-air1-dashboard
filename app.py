@@ -1,4 +1,5 @@
 import concurrent.futures
+import json
 import logging
 import os
 
@@ -95,6 +96,40 @@ def indoor_page():
 def service_worker():
     # Served from the root (not /static/sw.js) so its default scope covers the whole app.
     return send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+
+
+@app.route("/api/tick")
+def api_tick():
+    """Cheap change-detector so the pages don't have to wait out a poll interval.
+
+    The AIR-1 publishes within a second of its severity band changing, but a
+    browser on a 60s timer cannot know that until it next asks -- so the first
+    reading of an event could sit up to a minute before anything fetched it.
+    This endpoint exists to be polled often: it reads the MQTT bridge's in-memory
+    cache of the retained `state` topic and touches neither InfluxDB nor the
+    network, so a 5s cadence costs a dict lookup rather than a database query.
+    The frontend calls /api/latest only when `seen_at` actually advances.
+
+    Why not Server-Sent Events, which would be push rather than poll: gunicorn
+    runs here with one worker and eight threads (see docker-compose.yml -- one
+    worker because the MQTT bridge holds in-process state), and every open SSE
+    connection would pin one of those threads for as long as the tab stayed
+    open. A wall display, a phone and a laptop would be three, and the failure
+    mode when they run out is the whole app blocking, not just a slow refresh.
+    Frequent cheap polls degrade far more gracefully on this deployment.
+
+    Nulls are a normal answer (broker down, or nothing received yet) and mean
+    "no information" -- the frontend falls back to its own timer rather than
+    treating it as an error.
+    """
+    raw = mqtt_bridge.get_raw("state")
+    air_band = None
+    if raw:
+        try:
+            air_band = json.loads(raw).get("air_band")
+        except ValueError:
+            logging.warning("api_tick: retained state payload is not JSON")
+    return jsonify({"seen_at": mqtt_bridge.get_seen("state"), "air_band": air_band})
 
 
 @app.route("/api/bands")

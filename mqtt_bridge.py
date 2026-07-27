@@ -142,6 +142,19 @@ def get_raw(suffix):
     return entry["value"] if entry else None
 
 
+def get_seen(suffix):
+    """When we last received anything on one topic suffix, or None.
+
+    Deliberately the RECEIVE time rather than any timestamp inside the payload:
+    /api/tick uses it purely as a change token, and the device's own snapshots
+    carry no clock of their own. Monotonic per message, which is all a
+    change-detector needs.
+    """
+    with _lock:
+        entry = _state.get(suffix)
+    return entry["seen_at"] if entry else None
+
+
 def _val(snapshot, suffix):
     entry = snapshot.get(suffix)
     return entry["value"] if entry else None

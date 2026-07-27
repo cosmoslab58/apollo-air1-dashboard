@@ -33,6 +33,18 @@ docker compose up -d --build
 
 Then open `http://<host>:5960`.
 
+> **Deploying alongside a firmware change: flash the AIR-1 first.**
+> This app takes its severity thresholds from a **retained** MQTT message the
+> device publishes when it connects (see
+> [Severity bands](#severity-bands--the-device-owns-them)). Deploy the app before
+> the firmware and `/api/bands` has nothing to serve, so every page renders
+> uncoloured until the device next connects — which on a deep-sleep duty cycle
+> can be minutes. OTA the firmware first and the retained table is already
+> waiting on the broker when the container starts.
+>
+> After the first successful start the table is cached to `data/bands.json`, so
+> this only bites on a genuinely first deploy or after the data volume is wiped.
+
 For local dev without Docker:
 ```
 python3 -m venv venv && source venv/bin/activate
@@ -61,6 +73,11 @@ python app.py
 
 ## API
 
+- `GET /api/tick` — `{seen_at, air_band}` read from the MQTT bridge's in-memory
+  cache. No InfluxDB, no network. Polled every 5s by the pages purely as a
+  change token: when `seen_at` advances they fetch `/api/latest`, so a new
+  reading reaches the screen within ~5s instead of waiting out a poll interval.
+  Nulls mean "no information" (broker down, nothing received yet), not an error.
 - `GET /api/latest` — most recent reading as flat JSON. Includes `air_band`,
   the 0–5 worst-of severity band the *firmware* graded that reading at (see
   [Refresh cadence](#refresh-cadence)). `null` on points written before the
@@ -163,8 +180,26 @@ Two deliberate choices:
   they are hourly-ish feeds upstream, so polling harder just spends API quota
   to receive the same numbers.
 
+**The interval above is a floor, not the trigger.** The device publishes within a
+second of its band changing, but a page on a 60s timer cannot know that until it
+next asks — polling can't be woken by an event it hasn't fetched, so the first
+reading of an event could sit up to a minute before anything picked it up.
+
+`watchLatest` (`common.js`) closes that by polling `/api/tick` every 5s and
+fetching `/api/latest` only when the token moves. A band change therefore shows
+up in ~5s rather than up to 60s. If `/api/tick` or the MQTT bridge is
+unavailable the token never moves and this degrades to exactly the timer-based
+behaviour, which is also what bounds staleness if a publish is ever missed.
+
+Server-Sent Events would be the textbook answer and are the wrong one here:
+gunicorn runs with one worker and eight threads (one worker because the MQTT
+bridge holds in-process state), so every open SSE connection would pin a thread
+for the life of the tab. A wall display, a phone and a laptop would be three, and
+running out blocks the whole app rather than merely slowing a refresh. Frequent
+cheap polls degrade better on this deployment.
+
 Polling still pauses entirely while the tab is hidden, and fires once
-immediately when it becomes visible again (`pollAdaptive` in `common.js`).
+immediately when it becomes visible again.
 
 ## Security boundary
 

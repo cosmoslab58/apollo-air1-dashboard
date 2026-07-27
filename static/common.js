@@ -470,30 +470,67 @@ function pollInterval(fn, ms) {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) fn(); });
 }
 
-/* ---------- adaptive polling ----------
- * pollInterval with a rate that can change between ticks. `msFor()` is called
- * fresh each time the next tick is scheduled -- which is *after* fn() has
- * resolved -- so the delay is chosen from the data that just arrived.
+/* ---------- event-driven refresh with a timer floor ----------
+ * Runs `loadFn` when the device has actually published something new, rather
+ * than on a fixed schedule. Every WATCH_TICK_MS it asks /api/tick -- an in-memory
+ * read on the server, no InfluxDB -- and only calls loadFn when the `seen_at`
+ * token advances.
  *
- * setTimeout-chained rather than setInterval, because the delay has to be
- * recomputed every cycle. Two consequences worth knowing:
- *   - fn is awaited, so a slow request delays the next tick instead of
- *     stacking up behind it.
- *   - a throw would end the chain permanently (setInterval would merely skip a
- *     tick), so fn is wrapped. Callers already handle their own errors; this is
- *     belt-and-braces so a single failed fetch can never silently stop a wall
- *     display from ever updating again. */
-function pollAdaptive(fn, msFor) {
+ * This exists because the AIR-1 publishes within a second of its severity band
+ * changing, but a page on a 60s timer cannot know that until it next asks: the
+ * first reading of an event could sit a full minute before anything fetched it.
+ * Polling cannot be woken by an event it has not fetched, so the fix is to make
+ * the "has anything changed?" question cheap enough to ask constantly.
+ *
+ * `fallbackMsFor()` is a floor, not the primary mechanism. If /api/tick is
+ * unreachable or the MQTT bridge is down, its token never moves and this
+ * degrades to exactly the timer-based behaviour it replaced. It also bounds how
+ * stale the page can get if a publish is somehow missed.
+ *
+ * setTimeout-chained rather than setInterval, because both the tick cadence and
+ * the fallback interval are recomputed each cycle. loadFn is awaited so a slow
+ * request delays the next tick instead of stacking behind it, and wrapped so a
+ * single throw cannot end the chain and leave a wall display frozen forever
+ * (setInterval would merely skip a tick). */
+const WATCH_TICK_MS = 5000;
+
+function watchLatest(loadFn, fallbackMsFor) {
   let timer = null;
-  async function tick() {
-    if (!document.hidden) {
-      try { await fn(); } catch (e) { /* keep polling */ }
+  let lastSeen = null;
+  let lastLoad = 0;
+
+  async function run() {
+    if (document.hidden) { schedule(); return; }
+
+    let changed = false;
+    try {
+      const res = await fetch("/api/tick");
+      if (res.ok) {
+        const d = await res.json();
+        // First tick establishes the baseline without forcing a load -- the
+        // caller has already done its initial fetch at init.
+        if (d.seen_at != null && d.seen_at !== lastSeen) {
+          changed = lastSeen !== null;
+          lastSeen = d.seen_at;
+        }
+      }
+    } catch (e) { /* fall through to the timer floor */ }
+
+    if (changed || Date.now() - lastLoad >= fallbackMsFor()) {
+      lastLoad = Date.now();
+      try { await loadFn(); } catch (e) { /* keep watching */ }
     }
-    clearTimeout(timer);
-    timer = setTimeout(tick, msFor());
+    schedule();
   }
-  timer = setTimeout(tick, msFor());
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(run, WATCH_TICK_MS);
+  }
+
+  lastLoad = Date.now();   // the caller's own init load counts as the first one
+  schedule();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) run(); });
 }
 
 /* ---------- how fast to poll /api/latest ----------

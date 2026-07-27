@@ -17,16 +17,31 @@
   // too and their bands come from a different source (provider AQI).
   const worseBand = worseBandName;
 
-  // Six labels, matching the firmware's six bands. These are this app's own
-  // words: the firmware deliberately refuses to name its bands, because the
-  // obvious names (Good ... Hazardous) are EPA categories defined for outdoor
-  // criteria pollutants, and this headline can be driven by CO2 or VOC, which
-  // EPA does not regulate at all. "Severe"/"Hazard" are chosen to escalate
-  // without impersonating that scale.
+  // Six labels for the firmware's six bands, describing the READING rather than
+  // passing a health verdict, because this headline is a worst-of that any of
+  // four channels can drive.
+  //
+  // "Good / Fair / Poor / Bad" was the old wording and it does not survive that
+  // fact. Two problems. It is a near-paraphrase of EPA's AQI categories, which
+  // are legally defined terms for outdoor criteria pollutants -- the firmware
+  // refuses to name its bands for exactly this reason (see its LED section). And
+  // the headline is frequently driven by the VOC index, which is a deviation
+  // from this room's own recent baseline, not a concentration: calling that
+  // "Bad" asserts a health claim the measurement cannot support.
+  //
+  // "Elevated / High / Very high" say how far from normal the worst channel is,
+  // which is exactly what the number means and is true of all four channels.
+  // Paired with the "Driven by X" sub-line, the user gets magnitude and cause
+  // without the page inventing authority.
+  //
+  // NOTE: intentionally not aligned with the BAND_VARS css names (good/fair/
+  // .../hazard). Those are style hooks, some used outside band context
+  // (--good colours a downward trend arrow), so renaming them would be churn
+  // for no gain. These strings are the user-facing vocabulary.
   function bandLabel(band) {
     return {
-      good: "Good", fair: "Fair", poor: "Poor",
-      bad: "Bad", severe: "Severe", hazard: "Hazard",
+      good: "Normal", fair: "Elevated", poor: "High",
+      bad: "Very high", severe: "Severe", hazard: "Extreme",
     }[band] || null;
   }
 
@@ -292,6 +307,6 @@
   // latestPollMs). Outside stays at 15 min -- those are hourly-ish upstream
   // feeds, so polling them faster returns the same numbers and spends someone
   // else's API quota doing it.
-  pollAdaptive(loadLatest, () => latestPollMs(lastInsideLatest));
+  watchLatest(loadLatest, () => latestPollMs(lastInsideLatest));
   pollInterval(() => { loadOutside(); loadBasicSparks(); }, 15 * 60000);
 })();

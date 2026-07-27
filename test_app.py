@@ -20,6 +20,37 @@ def client():
     return app_module.app.test_client()
 
 
+def test_tick_reports_seen_and_band(client, monkeypatch):
+    # The change token the pages poll instead of waiting out an interval. Comes
+    # from the MQTT cache, so it must not touch InfluxDB -- query_latest is left
+    # unpatched here deliberately; a call would blow up on a missing client.
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_raw",
+                        lambda suffix: '{"air_band": 2, "co2_ppm": 900}')
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: 1234.5)
+    d = client.get("/api/tick").get_json()
+    assert d == {"seen_at": 1234.5, "air_band": 2}
+
+
+def test_tick_nulls_when_nothing_received(client, monkeypatch):
+    # Broker down or no message yet. Nulls mean "no information" and let the
+    # frontend fall back to its timer; this must not be an error status.
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_raw", lambda suffix: None)
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: None)
+    res = client.get("/api/tick")
+    assert res.status_code == 200
+    assert res.get_json() == {"seen_at": None, "air_band": None}
+
+
+def test_tick_survives_malformed_payload(client, monkeypatch):
+    # A truncated retained payload must not 500 the endpoint the whole refresh
+    # loop depends on; seen_at is still useful as a change token without it.
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_raw", lambda suffix: "{ truncated")
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: 99.0)
+    res = client.get("/api/tick")
+    assert res.status_code == 200
+    assert res.get_json() == {"seen_at": 99.0, "air_band": None}
+
+
 def test_bands_404_when_device_never_published(client, monkeypatch):
     # A 404 rather than a built-in default, so the frontend renders uncoloured
     # instead of showing thresholds this app made up. See bands.py.

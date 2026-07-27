@@ -583,7 +583,7 @@
   // History stays on a flat 60s: it is a far heavier Flux query, and a chart
   // spanning hours gains much less from a 15s refresh than the current-value
   // tiles do.
-  pollAdaptive(loadLatest, () => latestPollMs(previousLatest));
+  watchLatest(loadLatest, () => latestPollMs(previousLatest));
   pollInterval(loadControls, 30000);
   pollInterval(() => { loadHistory(currentRange); }, 60000);
 })();
