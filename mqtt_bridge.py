@@ -129,6 +129,19 @@ def device_online():
         return _state.get("status", {}).get("value") == "online"
 
 
+def get_raw(suffix):
+    """Raw payload last seen on one topic suffix under the prefix, or None.
+
+    _on_message already caches every topic under `<prefix>/#`, so reading a
+    topic the *device* publishes -- rather than one of the control entities
+    get_state() knows about -- needs no new subscription, just this accessor.
+    Used by bands.py for the retained `config/bands` table.
+    """
+    with _lock:
+        entry = _state.get(suffix)
+    return entry["value"] if entry else None
+
+
 def _val(snapshot, suffix):
     entry = snapshot.get(suffix)
     return entry["value"] if entry else None

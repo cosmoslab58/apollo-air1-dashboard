@@ -8,6 +8,17 @@ FIELDS = [
     "co2_ppm", "pressure_hpa", "temperature_c", "humidity_pct",
     "pm1_0_ugm3", "pm2_5_ugm3", "pm4_0_ugm3", "pm10_0_ugm3",
     "voc_index", "nox_index", "aqi",
+    # 0-5 worst-of severity band as the FIRMWARE graded it (-1 = nothing
+    # readable). Deliberately not derived here or in the browser: the device
+    # owns the thresholds that colour its own LED, and re-deriving them
+    # elsewhere is how this page ends up disagreeing with the light on the
+    # wall. The frontend also uses it to decide how fast to poll (see
+    # latestPollMs in common.js), because a band above 0 is exactly what makes
+    # the device publish every 15s instead of every 60s.
+    #
+    # Absent from any point written before the firmware that added it, so every
+    # consumer has to tolerate None here, not just on a cold start.
+    "air_band",
     "wifi_rssi_db", "esp_temperature_c", "uptime_s",
 ]
 STRING_FIELDS = ["voc_quality", "firmware_version"]

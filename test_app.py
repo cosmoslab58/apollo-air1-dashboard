@@ -7,6 +7,7 @@ import pytest
 import airnow
 import app as app_module
 import away
+import bands
 import google_aq
 import home_config
 import influx
@@ -17,6 +18,23 @@ import purpleair
 def client():
     app_module.app.config["TESTING"] = True
     return app_module.app.test_client()
+
+
+def test_bands_404_when_device_never_published(client, monkeypatch):
+    # A 404 rather than a built-in default, so the frontend renders uncoloured
+    # instead of showing thresholds this app made up. See bands.py.
+    monkeypatch.setattr(bands, "get_table", lambda: None)
+    assert client.get("/api/bands").status_code == 404
+
+
+def test_bands_ok(client, monkeypatch):
+    table = {"aqi": [50, 100, 150, 200, 300], "co2": [800, 1100, 2000, 3500, 5000],
+             "voc": [150, 250, 400], "nox": [20, 150, 250, 400],
+             "colors": ["#00c000"], "compare": "lte"}
+    monkeypatch.setattr(bands, "get_table", lambda: table)
+    res = client.get("/api/bands")
+    assert res.status_code == 200
+    assert res.get_json()["co2"] == [800, 1100, 2000, 3500, 5000]
 
 
 def test_latest_no_data_is_404(client, monkeypatch):

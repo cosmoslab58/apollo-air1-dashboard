@@ -467,8 +467,14 @@
   applyModeVisibility();
   updateForecastLink();
   fetchAwayLoc().then(updateForecastLink);
-  loadOutside();
-  loadOutsideHistorySection(currentRangeOutside);
+  // Gate the first paint on the device's band table, as the other pages do.
+  // It matters more here: this page's outside poll is 15 minutes, so painting
+  // uncoloured and letting the next tick fix it would leave the cards grey for
+  // a quarter of an hour.
+  bandTableReady.then(() => {
+    loadOutside();
+    loadOutsideHistorySection(currentRangeOutside);
+  });
   pollInterval(loadOutside, 15 * 60000);
   pollInterval(() => { loadOutsideHistorySection(currentRangeOutside); }, 60000);
 })();

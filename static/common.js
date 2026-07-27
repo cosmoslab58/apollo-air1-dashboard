@@ -45,20 +45,102 @@ function formatConcentrationUnits(units) {
   return short[units] || (units || "").replace(/_/g, " ").toLowerCase();
 }
 
-/* ---------- non-AQI bands (AQI bands live in aqi.js) ---------- */
-function bandFromCo2(co2) {
-  if (co2 === undefined || co2 === null || Number.isNaN(co2)) return null;
-  if (co2 > 2000) return "bad";
-  if (co2 > 1500) return "poor";
-  if (co2 > 1000) return "fair";
-  return "good";
+/* ================= severity bands =================
+ * THIS FILE DEFINES NO THRESHOLDS. Every cutoff comes from the AIR-1, which
+ * publishes its band table to a retained MQTT topic that the server re-serves
+ * at /api/bands. The device grades its own readings against that table, sets
+ * the publish cadence from it, and picks its LED colour from it -- so reading
+ * the same table here is what guarantees a CO2 tile on this page and the light
+ * on the wall can never disagree.
+ *
+ * This used to be four hardcoded functions, and they HAD drifted: CO2 banded at
+ * 1000/1500/2000 here versus 800/1100/2000/3500/5000 in the firmware, VOC had
+ * no green band at all, and NOx was never coloured. A reading of 900ppm showed
+ * green on this page while the LED was yellow.
+ *
+ * Until the table arrives, every band is null and readings render uncoloured.
+ * That is deliberate: an invented colour is worse than no colour, because it is
+ * indistinguishable from a real one.
+ *
+ * Band index -> CSS custom property. Six entries because the firmware grades
+ * 0-5; the last two are new (see style.css). Names are this app's own words,
+ * NOT the EPA category names -- those are legally defined for outdoor criteria
+ * pollutants and would be borrowed authority on a CO2 or VOC reading. The
+ * firmware refuses to name its bands for exactly that reason. */
+const BAND_VARS = ["good", "fair", "poor", "bad", "severe", "hazard"];
+
+let _bandTable = null;
+
+// Resolves once the first fetch settles, so pages can await it before their
+// initial render instead of painting uncoloured and then flashing into colour.
+// Never rejects: a missing table is a supported state, not an error.
+const bandTableReady = fetch("/api/bands")
+  .then((r) => (r.ok ? r.json() : null))
+  .then((t) => { _bandTable = t; return t; })
+  .catch(() => null);
+
+function bandTable() {
+  return _bandTable;
 }
 
-// No official health thresholds exist for Sensirion's VOC index the way the EPA
-// publishes them for AQI/CO2 -- these two cutoffs match the readout tile edge.
-function bandForVocIndex(v) {
-  if (typeof v !== "number") return null;
-  return v > 250 ? "bad" : v > 150 ? "poor" : null;
+/* Grade a value against one channel's cuts, returning a CSS var name.
+ *
+ * The comparison is upper-bound-INCLUSIVE (`value <= cut`), matching the
+ * `compare: "lte"` the device states in the payload and the EPA breakpoint
+ * style it follows (0-50 Good, 51-100 Moderate). Band index is the first cut
+ * the value fits under, or cuts.length past the end -- identical to the
+ * firmware's `grade()` lambda, which is the only other implementation. */
+function bandForChannel(channel, value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return null;
+  const table = _bandTable;
+  if (!table) return null;
+  const cuts = table[channel];
+  if (!Array.isArray(cuts) || cuts.length === 0) return null;
+  let index = cuts.length;
+  for (let i = 0; i < cuts.length; i++) {
+    if (value <= cuts[i]) { index = i; break; }
+  }
+  return BAND_VARS[Math.min(index, BAND_VARS.length - 1)] || null;
+}
+
+function bandFromCo2(co2) { return bandForChannel("co2", co2); }
+function bandForVocIndex(v) { return bandForChannel("voc", v); }
+function bandForNoxIndex(v) { return bandForChannel("nox", v); }
+
+// Rank two band names; null (no reading, or no table) loses to anything real.
+// Compares by position in BAND_VARS, so adding a band above "bad" needs no
+// change here.
+function worseBandName(a, b) {
+  if (!a) return b || null;
+  if (!b) return a;
+  return BAND_VARS.indexOf(a) >= BAND_VARS.indexOf(b) ? a : b;
+}
+
+/* The worst band across every channel the device grades, and which channel got
+ * it there. Used for the Overview headline and its "Driven by X" subtitle.
+ *
+ * All four channels, not just AQI and CO2 as the Overview used to compare: over
+ * 2.5 days of this unit's data VOC was the worst channel 94% of the time it was
+ * above green, so a headline built from AQI and CO2 alone was routinely naming
+ * the wrong cause -- and disagreeing with an LED that does look at all four. */
+const BAND_CHANNELS = [
+  { channel: "aqi", key: "aqi", label: "PM2.5" },
+  { channel: "co2", key: "co2_ppm", label: "CO2" },
+  { channel: "voc", key: "voc_index", label: "VOC" },
+  { channel: "nox", key: "nox_index", label: "NOx" },
+];
+
+function worstBandOf(latest) {
+  let best = { band: null, label: null };
+  if (!latest) return best;
+  for (const c of BAND_CHANNELS) {
+    const band = bandForChannel(c.channel, latest[c.key]);
+    if (!band) continue;
+    if (!best.band || BAND_VARS.indexOf(band) > BAND_VARS.indexOf(best.band)) {
+      best = { band, label: c.label };
+    }
+  }
+  return best;
 }
 
 /* ---------- provider identity (kept in one place so the pages and the
@@ -386,6 +468,65 @@ function updateForecastLink() {
 function pollInterval(fn, ms) {
   setInterval(() => { if (!document.hidden) fn(); }, ms);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) fn(); });
+}
+
+/* ---------- adaptive polling ----------
+ * pollInterval with a rate that can change between ticks. `msFor()` is called
+ * fresh each time the next tick is scheduled -- which is *after* fn() has
+ * resolved -- so the delay is chosen from the data that just arrived.
+ *
+ * setTimeout-chained rather than setInterval, because the delay has to be
+ * recomputed every cycle. Two consequences worth knowing:
+ *   - fn is awaited, so a slow request delays the next tick instead of
+ *     stacking up behind it.
+ *   - a throw would end the chain permanently (setInterval would merely skip a
+ *     tick), so fn is wrapped. Callers already handle their own errors; this is
+ *     belt-and-braces so a single failed fetch can never silently stop a wall
+ *     display from ever updating again. */
+function pollAdaptive(fn, msFor) {
+  let timer = null;
+  async function tick() {
+    if (!document.hidden) {
+      try { await fn(); } catch (e) { /* keep polling */ }
+    }
+    clearTimeout(timer);
+    timer = setTimeout(tick, msFor());
+  }
+  timer = setTimeout(tick, msFor());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+}
+
+/* ---------- how fast to poll /api/latest ----------
+ * The AIR-1 publishes faster during an event than at rest, so a fixed 60s poll
+ * would throw most of that away: worst case a 15s-old reading takes a full
+ * minute to reach the screen.
+ *
+ * Both the threshold and the two rates come from the device's band table
+ * (`elevated_band`, `period_s`, `period_elevated_s`) rather than being repeated
+ * here. Retuning the firmware's cadence therefore retunes this automatically --
+ * and, more to the point, the app cannot end up polling fast at moments the
+ * device isn't publishing fast, or slowly at moments it is.
+ *
+ * The value graded is `air_band`, the 0-5 worst-of the FIRMWARE published in the
+ * snapshot -- not re-derived here from co2_ppm/aqi/voc_index.
+ *
+ * Getting the threshold right needed measurement on the firmware side, and the
+ * firmware README has the numbers: "above green" was true ~50% of the time until
+ * the VOC green band was retuned to cover the index's own resting value. This
+ * side just follows whatever the device reports, whichever way that lands.
+ *
+ * Fallbacks are the slow rate: a missing air_band means firmware too old to have
+ * an elevated rate at all, so there is nothing faster to collect, and a missing
+ * table means we don't know the device's cadence and shouldn't guess at it. */
+const LATEST_POLL_FALLBACK_MS = 60000;
+
+function latestPollMs(latest) {
+  const table = bandTable();
+  const band = latest && latest.air_band;
+  const slow = (table && table.period_s * 1000) || LATEST_POLL_FALLBACK_MS;
+  const fast = (table && table.period_elevated_s * 1000) || slow;
+  const threshold = table && typeof table.elevated_band === "number" ? table.elevated_band : Infinity;
+  return typeof band === "number" && band >= threshold ? fast : slow;
 }
 
 /* ---------- service worker (installability is a nice-to-have) ---------- */

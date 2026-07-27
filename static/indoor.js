@@ -93,7 +93,7 @@
 
     renderRowChart(document.getElementById("chart-voc"), [
       { label: "VOC index", unit: "", decimals: 0, bandFor: bandForVocIndex, points: seriesFor(points, "voc_index", null).points },
-      { label: "NOx index", unit: "", decimals: 0, bandFor: () => null, points: seriesFor(points, "nox_index", null).points },
+      { label: "NOx index", unit: "", decimals: 0, bandFor: bandForNoxIndex, points: seriesFor(points, "nox_index", null).points },
     ], { leftLabel: rangeLabel, label: "VOC and NOx index history" });
 
     const tempPoints = seriesFor(points, "temperature_c", null).points.map(
@@ -143,7 +143,10 @@
     // poor/bad), so CO2 looked color-coded on the dashboard but not here.
     { id: "co2", label: "CO2", unit: "ppm", key: "co2_ppm", decimals: 0, band: bandFromCo2 },
     { id: "voc", label: "VOC index", unit: "", key: "voc_index", decimals: 0, band: bandForVocIndex },
-    { id: "nox", label: "NOx index", unit: "", key: "nox_index", decimals: 0, band: () => null },
+    // NOx is graded by the device (its own cuts, offset 1 rather than VOC's
+    // 100) and drives the LED like any other channel, so it is coloured here
+    // too. It used to be the one graded channel this page left grey.
+    { id: "nox", label: "NOx index", unit: "", key: "nox_index", decimals: 0, band: bandForNoxIndex },
     { id: "temp", label: "Temperature", unit: () => tempUnitLabel(), key: "temperature_c", decimals: 1, band: () => null, convert: displayTemp },
     { id: "hum", label: "Humidity", unit: "%", key: "humidity_pct", decimals: 1, band: () => null },
     { id: "pressure", label: "Pressure", unit: "hPa", key: "pressure_hpa", decimals: 1, band: () => null },
@@ -569,10 +572,18 @@
 
   /* ---------- init ---------- */
   renderUnitToggle();
-  loadLatest();
-  loadHistory(currentRange);
+  // Band table first -- see the same note in dashboard.js. loadControls is
+  // outside it because the control panel carries no severity colours.
+  bandTableReady.then(() => {
+    loadLatest();
+    loadHistory(currentRange);
+  });
   loadControls();
-  pollInterval(loadLatest, 60000);
+  // Readouts follow the device's own publish cadence -- see latestPollMs.
+  // History stays on a flat 60s: it is a far heavier Flux query, and a chart
+  // spanning hours gains much less from a 15s refresh than the current-value
+  // tiles do.
+  pollAdaptive(loadLatest, () => latestPollMs(previousLatest));
   pollInterval(loadControls, 30000);
   pollInterval(() => { loadHistory(currentRange); }, 60000);
 })();

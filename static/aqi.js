@@ -51,12 +51,24 @@ function aqiFromConcentration(parameter, value, units) {
   return Math.round(Math.max(0, Math.min(500, aqi)));
 }
 
+// Bands come from the device's published table via bandForChannel (common.js),
+// not from cutoffs written here -- see the header comment on that section. This
+// used to hardcode 50/100/150, which agreed with the firmware's first three
+// boundaries by luck and then stopped at "bad" where the firmware has two more
+// bands above it.
+//
+// Note the split of responsibility: the breakpoint table above turns a
+// CONCENTRATION into an AQI number, and that is EPA's published standard, safe
+// to implement in both places. What counts as "poor" *for a given AQI number*
+// is a severity judgement, and that comes from the device.
+//
+// Load order matters: aqi.js is included before common.js on every page, so
+// bandForChannel is not defined while this file is being parsed -- only when
+// these functions are eventually called. That is fine, and the guard keeps a
+// stray early call from throwing.
 function bandFromAqi(aqi) {
-  if (aqi === undefined || aqi === null || Number.isNaN(aqi)) return null;
-  if (aqi > 150) return "bad";
-  if (aqi > 100) return "poor";
-  if (aqi > 50) return "fair";
-  return "good";
+  if (typeof bandForChannel !== "function") return null;
+  return bandForChannel("aqi", aqi);
 }
 
 function bandForConcentration(parameter, value, units) {

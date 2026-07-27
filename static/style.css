@@ -30,10 +30,20 @@
     --accent-ink: light-dark(#f2fbf9, #0b1615);
     --zone-outside: light-dark(#3d7dc9, #7ab3f0);
 
+    /* Severity bands 0-5, matching the six the AIR-1 firmware grades and
+       lights its LED with (see BAND_VARS in common.js). The device also
+       publishes its literal LED hexes in the band table; these are the
+       screen-legible equivalents -- same hue order, adjusted for contrast on
+       a page rather than a 3-pixel RGB strip, and light/dark aware.
+       --severe and --hazard were added when the page stopped inventing its own
+       4-level scale: the firmware has always had a purple band above red, and
+       a dimmed-red band above that, which this palette simply could not show. */
     --good: light-dark(#2f8f45, #7bd17a);
     --fair: light-dark(#a5810f, #e0c15a);
     --poor: light-dark(#b25a1c, #e0935a);
     --bad: light-dark(#b23a3a, #e07272);
+    --severe: light-dark(#7d3aa8, #c08ae8);
+    --hazard: light-dark(#7a2020, #d14a4a);
     --poor-bg: light-dark(#f5e2d3, #2e2119);
 
     --danger: light-dark(#b23a3a, #e07272);

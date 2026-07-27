@@ -317,6 +317,9 @@
   document.addEventListener("providerchange", () => loadForecast());
 
   document.getElementById("forecast-source").textContent = `via ${providerLabel()}`;
-  applyMode().then(loadForecast);
+  // Band table before the first render, same as the other pages -- the AQI
+  // cuts that colour a forecast day's pollutants come from the device now, and
+  // this page only re-polls every 15 minutes.
+  Promise.all([applyMode(), bandTableReady]).then(loadForecast);
   pollInterval(loadForecast, 15 * 60000);
 })();

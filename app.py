@@ -8,6 +8,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 import airnow
 import aq_shared
 import away
+import bands
 import google_aq
 import home_config
 import influx
@@ -94,6 +95,22 @@ def indoor_page():
 def service_worker():
     # Served from the root (not /static/sw.js) so its default scope covers the whole app.
     return send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+
+
+@app.route("/api/bands")
+def api_bands():
+    """The severity band table the AIR-1 published, or 404 if never seen.
+
+    404 rather than a built-in default on purpose. This app deliberately holds
+    no thresholds of its own -- see bands.py -- so the honest answer to "we have
+    never heard from the device" is "no table", and the frontend renders
+    readings uncoloured. Substituting a plausible-looking default here is
+    precisely how the page and the LED came to disagree.
+    """
+    table = bands.get_table()
+    if table is None:
+        return jsonify({"error": "no band table received from the device yet"}), 404
+    return jsonify(table)
 
 
 @app.route("/api/latest")

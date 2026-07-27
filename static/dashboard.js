@@ -11,27 +11,23 @@
   // Overview renders no temperature at all, so index.html hides that settings
   // row (show_units_row) and this page has nothing to convert or re-render.
 
-  const BAND_ORDER = ["good", "fair", "poor", "bad"];
+  // Band ranking and the inside worst-of both come from common.js now
+  // (worseBandName / worstBandOf), so this page and the LED rank severity the
+  // same way. worseBand stays as a thin alias because the Outside cards use it
+  // too and their bands come from a different source (provider AQI).
+  const worseBand = worseBandName;
 
-  function worseBand(a, b) {
-    if (!a) return b;
-    if (!b) return a;
-    return BAND_ORDER.indexOf(a) >= BAND_ORDER.indexOf(b) ? a : b;
-  }
-
-  // Matches Outside rack-sub's "Driven by <pollutant>" instead of a custom
-  // advice sentence -- same worseBand() comparison used for the headline
-  // category (below), so whichever factor actually pushed it there is the
-  // one named, not a fixed guess.
-  function insideDrivenBy(d, band) {
-    if (!band) return "";
-    const aqiBand = bandFromAqi(d.aqi);
-    const co2Band = bandFromCo2(d.co2_ppm);
-    const co2IsWorse = !aqiBand || (co2Band && BAND_ORDER.indexOf(co2Band) > BAND_ORDER.indexOf(aqiBand));
-    return co2IsWorse ? "Driven by CO2" : "Driven by PM2.5";
-  }
+  // Six labels, matching the firmware's six bands. These are this app's own
+  // words: the firmware deliberately refuses to name its bands, because the
+  // obvious names (Good ... Hazardous) are EPA categories defined for outdoor
+  // criteria pollutants, and this headline can be driven by CO2 or VOC, which
+  // EPA does not regulate at all. "Severe"/"Hazard" are chosen to escalate
+  // without impersonating that scale.
   function bandLabel(band) {
-    return { good: "Good", fair: "Fair", poor: "Poor", bad: "Bad" }[band] || null;
+    return {
+      good: "Good", fair: "Fair", poor: "Poor",
+      bad: "Bad", severe: "Severe", hazard: "Hazard",
+    }[band] || null;
   }
 
   /* ---------- mini sparkline (rack-spark) ----------
@@ -103,8 +99,9 @@
   // -- the one pollutant both racks share -- letting a glance across the two
   // columns compare them directly instead of hunting for the matching label.
   // CO2 and VOC follow -- along with PM2.5, they're the two other signals
-  // that actually drive severity here (CO2 co-determines the headline band
-  // via worseBand() above; VOC has its own band too). Trimmed down from a
+  // that actually drive severity here (all four graded channels feed the
+  // headline band via worstBandOf; NOx is the one omitted, being effectively
+  // pinned at band 0 on this unit). Trimmed down from a
   // 10-field rack (PM1.0/PM4.0/NOx/Temp/Humidity/Pressure included) to match
   // Outside's own density -- Outside never showed more than its handful of
   // pollutants either, no weather/comfort metrics, full breakdown one tap
@@ -248,12 +245,17 @@
       if (!res.ok) throw new Error("request failed");
       const d = await res.json();
 
-      const band = worseBand(bandFromAqi(d.aqi), bandFromCo2(d.co2_ppm));
+      // Worst across all four graded channels, and the channel that got it
+      // there -- the same comparison the device makes to colour its LED. The
+      // previous version compared only AQI and CO2, so it could not name VOC,
+      // which is in fact this unit's worst channel 94% of the time it is above
+      // green, and it showed a colour the light disagreed with.
+      const { band, label } = worstBandOf(d);
       const inAqi = document.getElementById("in-aqi");
       inAqi.textContent = typeof d.aqi === "number" ? String(Math.round(d.aqi)) : "—";
       inAqi.style.setProperty("--band-color", bandVar(band));
       document.getElementById("in-category").textContent = bandLabel(band) || "Waiting for a reading…";
-      document.getElementById("in-sub").textContent = insideDrivenBy(d, band);
+      document.getElementById("in-sub").textContent = label ? `Driven by ${label}` : "";
       lastInsideLatest = d;
       document.getElementById("inside-rows").innerHTML = insideRowsHtml(d);
       // When the AIR-1 last reported a reading into the DB.
@@ -277,9 +279,19 @@
   /* ---------- init ---------- */
   updateForecastLink();
   fetchAwayLoc().then(updateForecastLink);
-  loadLatest();
-  loadOutside();
-  loadBasicSparks();
-  pollInterval(loadLatest, 60000);
+  // Wait for the device's band table before the first paint, so tiles come up
+  // already coloured rather than grey-then-flash. bandTableReady never rejects
+  // -- if no table ever arrives, these render uncoloured and stay that way,
+  // which is the intended "we don't invent colours" behaviour.
+  bandTableReady.then(() => {
+    loadLatest();
+    loadOutside();
+    loadBasicSparks();
+  });
+  // The inside reading follows the device's own publish cadence (see
+  // latestPollMs). Outside stays at 15 min -- those are hourly-ish upstream
+  // feeds, so polling them faster returns the same numbers and spends someone
+  // else's API quota doing it.
+  pollAdaptive(loadLatest, () => latestPollMs(lastInsideLatest));
   pollInterval(() => { loadOutside(); loadBasicSparks(); }, 15 * 60000);
 })();
