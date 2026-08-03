@@ -76,7 +76,13 @@
     font-size: 16px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
+    /* On phones 100vh is the LARGE viewport (URL bar hidden), so a
+       min-height: 100vh page is taller than the screen whenever the URL bar
+       is showing and always scrolls ~56px -- the footer sat just off-screen
+       on a page that otherwise fits. dvh tracks the real viewport; the vh
+       line stays as the fallback for engines without dynamic units. */
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
   }
@@ -603,6 +609,16 @@
     color: var(--ink-dim); text-decoration: underline; text-underline-offset: 2px;
   }
   footer.page-footer .footer-link:hover { color: var(--ink); }
+  /* The 56px stand-off above the footer is a desktop luxury: on a short
+     phone it (plus the fixed-nav clearance) is exactly what pushed the
+     footer past the fold -- Overview with a 6-pollutant provider (Google)
+     overflowed a 667px viewport by ~11px. Tightening the gap and the
+     view's top padding buys ~44px, which keeps the whole page inside even
+     small-phone viewports; taller content pages scroll as normal. */
+  @media (max-width: 480px) {
+    footer.page-footer { margin-top: 20px; }
+    .view { padding-top: 20px; }
+  }
 
   /* Sits above the fixed bottom nav -- clears the taller provider-row
      version (Forecast) too, since this same rule covers both. */
