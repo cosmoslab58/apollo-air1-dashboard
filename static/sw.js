@@ -1,4 +1,4 @@
-const CACHE_NAME = "apollo-air1-shell-v9";
+const CACHE_NAME = "apollo-air1-shell-v10";
 const SHELL_FILES = [
   "/static/fonts/instrument-sans.woff2",
   "/static/fonts/martian-mono.woff2",
@@ -9,6 +9,7 @@ const SHELL_FILES = [
   // anything already bookmarked.
   "/outdoor",
   "/indoor",
+  "/device",
   "/static/style.css",
   "/static/aqi.js",
   "/static/common.js",
@@ -17,6 +18,7 @@ const SHELL_FILES = [
   "/static/forecast.js",
   "/static/technical.js",
   "/static/indoor.js",
+  "/static/device.js",
   "/static/manifest.webmanifest",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",

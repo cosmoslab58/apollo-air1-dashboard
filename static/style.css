@@ -128,11 +128,6 @@
     display: flex; flex-direction: column; flex: 1 0 auto; width: 100%;
   }
   .wrap > .view { flex: 1 0 auto; }
-  /* Overview/Outdoor/Forecast also carry the provider row inside .bottom-nav
-     (see below) -- their content needs extra bottom padding to clear it too.
-     Indoor has no provider concept (it's the sensor's own reading, not an
-     external source) and stays at the base amount above. */
-  .wrap--provider-bar { padding-bottom: calc(96px + 62px + env(safe-area-inset-bottom, 0px)); }
   /* Every extra px of side padding on a narrow phone is a px the chart
      itself doesn't get -- both the faceplate and .wrap eat into the same
      budget, so both come down together below this width. */
@@ -143,49 +138,41 @@
   }
 
   /* ---------- bottom nav ----------
-     The one fixed surface at the bottom of every page, one shared panel/
-     border/shadow rather than two stacked bars: an optional provider row
-     (Overview/Outdoor/Forecast -- pages whose reading comes from an external
-     source; not Indoor, which has none) sitting above the four-tab page nav,
-     divided by a single hairline. Both rows share one button language --
-     flat resting state, same accent wash for whichever one is currently
-     selected -- so switching data source and switching page read as the same
-     kind of control, not two different widgets bolted together. Replaces the
-     old scattered "Details →" pills and the icon-only back button -- there's
-     always exactly one visible way to get anywhere. */
+     The one fixed surface at the bottom of every page: the four-tab page
+     nav, icon over label -- the standard mobile bottom-nav pattern, since
+     this is an installed PWA on phones. The provider row that used to stack
+     above it moved into the source picker (the "via X" stamp next to each
+     outside reading, see common.js): data-source selection is an expert
+     concern, not navigation, and it doubled the height of the app's one
+     permanently-visible surface. Replaces the old scattered "Details →"
+     pills and the icon-only back button -- there's always exactly one
+     visible way to get anywhere. */
   .bottom-nav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
     background: var(--panel); border-top: 1px solid var(--hairline);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  /* Both rows sit in the same 1080px column as everything else on the page,
-     rather than spanning the full window. Edge-to-edge, the selected provider
-     chip's wash started ~250px left of the card column it describes and the
-     last chip hugged the window edge, so the one permanently-visible surface
-     in the app was also the only one that ignored its grid. The bar's own
-     border-top stays full-bleed -- that's the fixed bar's edge against the
-     page, not a rule between columns of content -- but the divider between
-     the two rows is now inset to match the page footer's rule directly above
-     it. Gutters track .wrap's at every width, including the 420px step. */
-  .bottom-nav .provider-chips,
-  .bottom-nav .tab-bar {
-    max-width: 1080px; margin: 0 auto;
-  }
-  .bottom-nav .provider-chips {
-    padding: 6px 20px; border-bottom: 1px solid var(--hairline);
-  }
+  /* The tabs sit in the same 1080px column as everything else on the page,
+     rather than spanning the full window -- edge-to-edge, the selected tab's
+     wash started ~250px left of the card column it describes. The bar's own
+     border-top stays full-bleed: that's the fixed bar's edge against the
+     page, not a rule between columns of content. Gutters track .wrap's at
+     every width, including the 420px step. */
   .tab-bar {
+    max-width: 1080px; margin: 0 auto;
     display: flex; justify-content: center; gap: 4px;
     padding: 6px 20px;
   }
   @media (max-width: 420px) {
-    .bottom-nav .provider-chips, .tab-bar { padding-left: 14px; padding-right: 14px; }
+    .tab-bar { padding-left: 14px; padding-right: 14px; }
   }
   .tab-bar a {
     flex: 0 1 160px; min-width: 0; text-align: center; text-decoration: none;
-    color: var(--ink-dim); font-size: 0.875rem; font-weight: 600;
-    padding: 12px 4px; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--ink-dim); font-size: 0.75rem; font-weight: 600;
+    padding: 7px 4px 9px; border-radius: 8px;
   }
+  .tab-icon { width: 20px; height: 20px; flex: none; }
   .tab-bar a[aria-current="page"] {
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -203,18 +190,13 @@
      colour in moves the surface toward the text either way -- lighter in dark
      mode, darker in light -- so one declaration reads on both themes. */
   @media (hover: hover) {
-    .tab-bar a:hover, .provider-chip:not([aria-pressed="true"]):not([data-no-forecast="true"]):hover {
+    .tab-bar a:hover {
       background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--ink);
     }
     .tab-bar a[aria-current="page"]:hover {
       background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
     }
   }
-  /* .tab-bar a sets an explicit display, which overrides the UA [hidden]
-     display:none -- without this rule, updateForecastLink's link.hidden = true
-     (used to hide the Forecast tab for providers with no forecast) has no
-     visual effect and the tab stays on screen. */
-  .tab-bar a[hidden] { display: none; }
 
   /* ---------- faceplate header ---------- */
   .faceplate {
@@ -343,6 +325,14 @@
   .settings-row .cl-name { font-size: 0.875rem; }
   .settings-row .settings-rail { width: 100%; }
   .settings-row .settings-rail button { flex: 1 1 0; text-align: center; }
+  /* The one navigation row in the panel -- to the AIR-1's diagnostics/setup
+     page. Same weight as the row labels, chevron at the far edge. */
+  .settings-device-link {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 0.875rem; font-weight: 600; color: var(--ink);
+    text-decoration: none; padding: 2px 0;
+  }
+  @media (hover: hover) { .settings-device-link:hover { color: var(--accent); } }
 
   /* ---------- shared card surface ----------
      Every raised panel in the app -- readout tiles, chart cards, racks,
@@ -604,7 +594,9 @@
     display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
     font-size: 0.75rem; color: var(--ink-dim);
   }
-  footer.page-footer #footer-clock { font-variant-numeric: tabular-nums; }
+  /* margin-left: auto keeps the clock at the right edge even on the pages
+     whose footer carries nothing else (the dev links live on /device only). */
+  footer.page-footer #footer-clock { font-variant-numeric: tabular-nums; margin-left: auto; }
   footer.page-footer .footer-link {
     color: var(--ink-dim); text-decoration: underline; text-underline-offset: 2px;
   }
@@ -620,9 +612,8 @@
     .view { padding-top: 20px; }
   }
 
-  /* Sits above the fixed bottom nav -- clears the taller provider-row
-     version (Forecast) too, since this same rule covers both. */
-  .toast-stack { position: fixed; bottom: calc(76px + 62px + env(safe-area-inset-bottom, 0px)); right: 18px; z-index: 50; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  /* Sits above the fixed bottom nav. */
+  .toast-stack { position: fixed; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); right: 18px; z-index: 50; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
   .toast {
     background: var(--ink); color: var(--panel); font-size: 0.875rem; font-weight: 600;
     padding: 10px 16px; border-radius: 8px; box-shadow: var(--shadow-raised);
@@ -688,45 +679,106 @@
 }
 .rack--outside { border-top-color: var(--zone-outside); }
 
+/* ---------- tappable racks ----------
+   Each Overview rack is a stretched link to its details page: the anchor
+   wraps the zone heading and its ::after covers the whole card, so tapping
+   the thing you're curious about is the navigation everyone tries first.
+   The source button in Outside's foot keeps its own tap via z-index. */
+.rack--tappable { position: relative; }
+.rack-link {
+  color: inherit; text-decoration: none;
+  display: inline-flex; align-items: baseline; gap: 8px;
+}
+.rack-link::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius); }
+.rack-link:focus-visible { outline: none; }
+.rack-link:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Absolutely placed rather than in the zone line's flex flow -- the area
+   name wraps onto its own line in narrow columns (see the container query
+   below) and a flexed chevron would get pushed onto a third. */
+.rack-chevron {
+  position: absolute; top: 12px; right: 12px;
+  color: var(--ink-dim); font-size: 1.25rem; line-height: 1; font-weight: 400;
+}
+.rack--tappable .rack-zone { padding-right: 20px; }
+.rack--tappable .source-btn { position: relative; z-index: 2; }
+@media (hover: hover) {
+  .rack--tappable:hover { box-shadow: var(--shadow-raised); }
+  .rack--tappable:hover .rack-chevron { color: var(--ink); }
+}
+
 .rack-head { padding: 14px 14px 12px; }
 @container (max-width: 220px) { .rack-head { padding: 10px 10px 8px; } }
 
-/* Same flat-button language as .tab-bar a right below it in .bottom-nav --
-   plain resting state, same accent wash for the selected one -- so the two
-   rows read as one control family. Each chip still carries its own
-   provider's live AQI dot/value, not just a selected state, since tapping
-   one is also how you learn what the other three are reading. Scrolls
-   horizontally as one row rather than wrapping to 2x2 -- a wrap would make
-   the fixed bar's height (and how much of the screen it permanently
-   occupies) depend on viewport width. */
-.provider-chips { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
-.provider-chips::-webkit-scrollbar { display: none; }
-.provider-chip {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  flex: 1 1 0; min-width: 100px;
-  font-size: 0.875rem; font-weight: 600;
-  background: transparent; color: var(--ink-dim); border: none;
-  border-radius: 8px; padding: 12px 4px; cursor: pointer; min-height: 44px;
+/* ---------- data-source picker ----------
+   The "via AirNow · Updated 19m ago" stamp IS the control that changes the
+   source (see common.js) -- the provider's name doubles as the picker's
+   trigger, underlined with a chevron so it reads as tappable while keeping
+   .provider-status's fine-print voice. This replaced the provider chip row
+   that used to sit inside the fixed bottom nav. */
+.source-btn {
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; text-align: left;
+  /* Padding widens the tap target; the matching negative margin keeps the
+     visible box where the plain span sat so surrounding spacing holds. */
+  padding: 8px 0; margin: -8px 0;
+  text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--ink-dim) 55%, transparent);
 }
-.provider-chip[aria-pressed="true"] {
+/* Survives textContent updates -- a pseudo-element isn't a child node. */
+.source-btn::after { content: " ▾"; font-size: 0.625rem; }
+@media (hover: hover) { .source-btn:hover { color: var(--ink); } }
+.source-btn:empty { display: none; }
+
+/* The sheet: same raised-surface family as the settings panel, floated
+   above the tab bar and centered -- one placement that works at every
+   width, no popover coordinate math. */
+.source-sheet {
+  position: fixed; z-index: 30;
+  left: 50%; transform: translateX(-50%);
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  width: min(340px, calc(100vw - 24px));
+  padding: 4px 8px 8px;
+  animation: sourcesheetin 160ms ease both;
+}
+.source-sheet[hidden] { display: none; }
+@keyframes sourcesheetin {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.source-sheet-head {
+  font-size: 0.75rem; color: var(--ink-dim); font-weight: 600;
+  padding: 10px 8px 8px; border-bottom: 1px solid var(--hairline); margin-bottom: 4px;
+}
+/* Each row still carries that provider's live AQI dot/value, not just a
+   selected state -- tapping between sources is also how you learn what the
+   other three are reading. Same flat-button language as the tab bar. */
+.source-row {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  background: transparent; border: none; border-radius: 8px;
+  padding: 12px 8px; min-height: 44px; cursor: pointer;
+  font-size: 0.875rem; font-weight: 600; color: var(--ink-dim);
+  font-family: inherit; text-align: left;
+}
+.source-row[aria-pressed="true"] {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.provider-chip[data-unavailable="true"] { opacity: 0.45; }
-.provider-chip[data-no-forecast="true"] { opacity: 0.35; cursor: not-allowed; }
-.provider-chip .pc-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--pc-color, var(--ink-dim)); }
-.provider-chip .pc-aqi { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
-/* Below 480px, 4 chips at their normal size don't fit a phone's width without
-   scrolling, and the scroll wasn't visually obvious enough to read as
-   "swipeable" rather than just cropped. Dropping the live AQI number and
-   tightening the padding/gap/type size gets all 4 into one row with no
-   scrolling at all -- the colored dot alone still says "this one's not
-   Good" even without the number attached. overflow-x stays on as a
-   fallback for anything narrower still. */
-@media (max-width: 480px) {
-  .provider-chip { padding: 12px 2px; gap: 4px; min-width: 0; font-size: 0.75rem; }
-  .provider-chip .pc-aqi { display: none; }
+@media (hover: hover) {
+  .source-row:not([aria-pressed="true"]):not(:disabled):hover {
+    background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--ink);
+  }
 }
+.source-row[data-unavailable="true"] { opacity: 0.55; }
+.source-row:disabled { opacity: 0.4; cursor: not-allowed; }
+.source-row .pc-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--pc-color, var(--ink-dim)); }
+.source-row .source-row-name { flex: none; }
+/* The why-it's-dim reason ("no away location set", "No forecast") -- kept to
+   one truncated line so an API's long sentence can't blow the row open. */
+.source-row .source-row-note {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.6875rem; font-weight: 500; color: var(--ink-dim); text-align: right;
+}
+.source-row .pc-aqi { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 
 .rack-stat { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rack-aqi {
@@ -862,8 +914,8 @@
   .rack-row:nth-child(odd) { padding-right: 6px; }
   .rack-row:nth-child(even) { padding-left: 6px; }
   /* At this width whether the category text still fits beside the AQI number
-     comes down to the length of the dominant-pollutant line -- "Driven by
-     PM2.5" pushes Inside's text column under the number while "Driven by O3"
+     comes down to the length of the dominant-pollutant line -- "Main pollutant:
+     PM2.5" pushes Inside's text column under the number while a shorter one
      stays alongside it, so the two headline numbers end up on different
      lines even though the row tracks they sit in are aligned. Stacking is
      the arrangement the longer string forces anyway; applying it to both
@@ -970,6 +1022,10 @@
 .forecast-card {
   padding: 18px 20px;
 }
+/* "PurpleAir doesn't publish forecasts — showing AirNow instead." -- shown
+   when the page fell back (see forecast.js's effectiveProvider). */
+.fallback-note { margin: 0 0 12px; }
+.fallback-note[hidden] { display: none; }
 .forecast-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .forecast-area { margin-bottom: 0; }
 /* flex-wrap lets the Refresh button drop to its own line rather than

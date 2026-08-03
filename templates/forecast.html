@@ -8,7 +8,7 @@
 {% set show_units_row = false %}
 {% include "_partials/chrome_header.html" %}
 
-<div class="wrap wrap--provider-bar">
+<div class="wrap">
   <main class="view view-fade">
     <h1 class="zone-banner zone-banner--outside">
       <span class="zone-dot"></span> Air quality forecast
@@ -18,10 +18,19 @@
       <div class="forecast-card-head">
         <div class="forecast-area eyebrow" id="forecast-area">—</div>
         <div class="forecast-meta">
-          <span class="forecast-source provider-status" id="forecast-source">—</span>
+          {# Doubles as the data-source picker. data-restrict-forecast marks
+             this as the one picker where a provider with no forecast
+             (PurpleAir) can't be chosen -- everywhere else it's a perfectly
+             valid live-conditions source. #}
+          <button type="button" class="forecast-source provider-status source-btn" id="forecast-source" aria-haspopup="dialog" aria-expanded="false" data-restrict-forecast="true">—</button>
           <button type="button" class="refresh-btn" id="forecast-refresh">Refresh</button>
         </div>
       </div>
+      {# Shown when the selected provider publishes no forecast and the page
+         fell back to AirNow (see forecast.js) -- the Forecast tab no longer
+         hides for those providers, so arriving here with one selected has to
+         land somewhere honest rather than on a 400. #}
+      <div class="fallback-note eyebrow" id="forecast-fallback-note" hidden></div>
       <div class="forecast-days" id="forecast-days"></div>
       <!-- Google's health guidance is identical across every day more often
            than not (it's boilerplate tied to the AQI category, not the
@@ -38,7 +47,6 @@
   {% include "_partials/footer.html" %}
 </div>
 
-{% set show_provider_bar = true %}
 {% set active_page = "forecast" %}
 {% include "_partials/bottom_nav.html" %}
 

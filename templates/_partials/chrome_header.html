@@ -56,4 +56,10 @@
     </form>
   </div>
   {% endif %}
+  {# The AIR-1's diagnostics and setup controls (calibration, sleep, LED,
+     factory reset) live on their own page -- device config next to theme/
+     units here would bury the routine toggles under the once-a-year ones. #}
+  <div class="settings-row">
+    <a class="settings-device-link" href="/device">Device settings <span aria-hidden="true">›</span></a>
+  </div>
 </header>

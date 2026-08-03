@@ -371,11 +371,11 @@
       document.getElementById("outside-aqi-tech").textContent = d.aqi ?? "—";
       document.getElementById("outside-aqi-tech").style.setProperty("--band-color", bandVar(band));
       document.getElementById("outside-category-tech").textContent = d.category || "—";
-      document.getElementById("outside-dominant-tech").textContent = d.dominant_pollutant ? `Driven by ${d.dominant_pollutant}` : "";
+      document.getElementById("outside-dominant-tech").textContent = d.dominant_pollutant ? `Main pollutant: ${d.dominant_pollutant}` : "";
       document.getElementById("outside-area-tech").textContent = d.reporting_area || "—";
       // Which provider this reading is from and when it was last refreshed --
-      // both in one place, since the persistent chip bar's highlight alone
-      // wasn't a clear enough tell of the current selection.
+      // both in one place, and the stamp itself is the source picker
+      // (common.js), so the name doubles as the control that changes it.
       document.getElementById("outside-updated-tech").textContent = `via ${providerLabel()} · Updated ${whenText}`;
       document.getElementById("outside-tech-card").style.setProperty("--edge-color", bandVar(band));
       document.getElementById("outside-pollutants").innerHTML = pollutantFactorsHtml(d.pollutants);
@@ -384,6 +384,9 @@
       document.getElementById("outside-aqi-tech").textContent = "—";
       document.getElementById("outside-category-tech").textContent = apiErrorMsg || "Unavailable";
       document.getElementById("outside-dominant-tech").textContent = "";
+      // Still "via X" -- the stamp is also the source picker, and an
+      // unreachable provider is exactly when you need it to switch away.
+      document.getElementById("outside-updated-tech").textContent = `via ${providerLabel()}`;
       document.getElementById("outside-pollutants").innerHTML = "";
       document.getElementById("outside-discussion").innerHTML = "";
     }
@@ -448,8 +451,8 @@
     loadOutsideHistorySection(currentRangeOutside);
   });
 
-  // The persistent provider bar (common.js) is now reachable from this page
-  // too, not just Overview.
+  // The shared source picker (common.js) -- this page's trigger is the
+  // "via X" stamp in the Current reading section head.
   document.addEventListener("providerchange", () => {
     loadOutside();
     loadOutsideHistorySection(currentRangeOutside);

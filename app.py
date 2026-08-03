@@ -103,6 +103,13 @@ def indoor_page():
     return render_template("indoor.html")
 
 
+@app.route("/device")
+def device_page():
+    # Diagnostics + setup controls, split off the Inside page so its readings
+    # stay approachable. Linked from the settings panel, not the tab bar.
+    return render_template("device.html")
+
+
 @app.route("/sw.js")
 def service_worker():
     # Served from the root (not /static/sw.js) so its default scope covers the whole app.

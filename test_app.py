@@ -20,6 +20,28 @@ def client():
     return app_module.app.test_client()
 
 
+@pytest.mark.parametrize("path", ["/", "/indoor", "/outdoor", "/forecast", "/device"])
+def test_pages_render(client, path):
+    res = client.get(path)
+    assert res.status_code == 200
+    # Every page carries the shared bottom nav; a template include that broke
+    # would 500 above, but this also catches a page silently losing its nav.
+    assert b'class="tab-bar"' in res.data
+
+
+def test_old_technical_url_redirects(client):
+    res = client.get("/technical")
+    assert res.status_code == 301
+    assert res.headers["Location"].endswith("/outdoor")
+
+
+def test_device_controls_live_on_device_page_not_indoor(client):
+    # The factory-reset button (and the rest of the setup controls) moved to
+    # /device -- the Inside page is readings only.
+    assert b"btn-factory-reset" not in client.get("/indoor").data
+    assert b"btn-factory-reset" in client.get("/device").data
+
+
 def test_tick_reports_seen_and_band(client, monkeypatch):
     # The change token the pages poll instead of waiting out an interval. Comes
     # from the MQTT cache, so it must not touch InfluxDB -- query_latest is left

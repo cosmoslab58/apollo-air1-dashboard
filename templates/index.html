@@ -11,7 +11,7 @@
 {% set show_units_row = false %}
 {% include "_partials/chrome_header.html" %}
 
-<div class="wrap wrap--provider-bar">
+<div class="wrap">
 
   <!-- ============ BASIC VIEW ============ -->
   <main class="view view-fade" id="view-simple">
@@ -23,9 +23,14 @@
     <h1 class="visually-hidden">Air quality overview</h1>
     <div class="rack-grid">
 
-      <div class="rack rack--inside">
+      {# Each rack is a stretched link to its details page (rack-link's ::after
+         covers the card) -- tapping the thing you're curious about is the
+         navigation everyone tries first, before the tab bar. The source
+         button in Outside's foot sits above the link (z-index) so it stays
+         its own tap. #}
+      <div class="rack rack--inside rack--tappable">
         <div class="rack-head">
-          <h2 class="rack-zone"><span class="zone-dot"></span> Inside</h2>
+          <h2 class="rack-zone"><a class="rack-link" href="/indoor"><span class="zone-dot"></span> Inside</a><span class="rack-chevron" aria-hidden="true">›</span></h2>
           <div class="rack-stat">
             <span class="rack-aqi" id="in-aqi" style="--band-color: var(--ink-dim);">—</span>
             <div class="rack-stat-text">
@@ -41,9 +46,9 @@
         </div>
       </div>
 
-      <div class="rack rack--outside">
+      <div class="rack rack--outside rack--tappable">
         <div class="rack-head">
-          <h2 class="rack-zone"><span class="zone-dot"></span> Outside <span class="rack-area" id="outside-area">—</span></h2>
+          <h2 class="rack-zone"><a class="rack-link" href="/outdoor"><span class="zone-dot"></span> Outside</a> <span class="rack-area" id="outside-area">—</span><span class="rack-chevron" aria-hidden="true">›</span></h2>
           <div class="rack-stat">
             <span class="rack-aqi" id="out-aqi" style="--band-color: var(--ink-dim);">—</span>
             <div class="rack-stat-text">
@@ -55,7 +60,9 @@
         </div>
         <div class="rack-rows" id="outside-rows"></div>
         <div class="rack-foot">
-          <span class="rack-updated provider-status" id="out-updated"></span>
+          {# The "via AirNow · Updated 19m ago" stamp doubles as the data-source
+             picker -- the source name IS the control that changes it. #}
+          <button type="button" class="rack-updated provider-status source-btn" id="out-updated" aria-haspopup="dialog" aria-expanded="false"></button>
         </div>
       </div>
 
@@ -65,7 +72,6 @@
   {% include "_partials/footer.html" %}
 </div>
 
-{% set show_provider_bar = true %}
 {% set active_page = "overview" %}
 {% include "_partials/bottom_nav.html" %}
 

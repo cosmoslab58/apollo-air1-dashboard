@@ -144,14 +144,31 @@
     setTimeout(() => el.remove(), 3200);
   }
 
-  // The provider is chosen from the persistent chip bar (common.js,
-  // currentProvider()) -- this page reacts to it via "providerchange" below
-  // and shows which agency actually served the data (forecast-source, using
-  // the response's own "provider" field, which is the real source of truth --
-  // see loadForecast).
+  // The provider is chosen from the shared source picker (common.js,
+  // currentProvider()) -- this page's trigger is the "via X" stamp in the
+  // card head. It reacts via "providerchange" below and shows which agency
+  // actually served the data (forecast-source, using the response's own
+  // "provider" field, which is the real source of truth -- see loadForecast).
   const PROVIDER_LABELS = { google: "Google Air Quality", openweathermap: "OpenWeatherMap", airnow: "AirNow", purpleair: "PurpleAir" };
   function providerLabel(provider) {
-    return PROVIDER_LABELS[provider || currentProvider()] || "AirNow";
+    return PROVIDER_LABELS[provider || effectiveProvider()] || "AirNow";
+  }
+
+  // The Forecast tab never hides (see common.js's updateForecastLink), so
+  // arriving here with a forecast-less provider selected (PurpleAir) has to
+  // land somewhere honest: fall back to AirNow and say so in the note below
+  // the card head, rather than surface the server's 400 as an error state.
+  function effectiveProvider() {
+    return PROVIDERS_WITHOUT_FORECAST.has(currentProvider()) ? "airnow" : currentProvider();
+  }
+
+  function syncFallbackNote() {
+    const note = document.getElementById("forecast-fallback-note");
+    const fellBack = PROVIDERS_WITHOUT_FORECAST.has(currentProvider());
+    note.hidden = !fellBack;
+    note.textContent = fellBack
+      ? `${PROVIDER_NAMES[currentProvider()]} doesn't publish forecasts — showing AirNow instead.`
+      : "";
   }
 
   // null = home; a zip when Away is active. Driven entirely by the header's
@@ -200,18 +217,18 @@
       // pollutant filtered out as non-convertible), in which case fall back to
       // just naming the dominant pollutant.
       const pollutantsInner = pollutantsHtml(day.pollutants);
-      // "Driven by O3", not a bare "O3" -- same phrasing the Overview racks and
-      // the Outdoor headline use for the dominant pollutant, and on a card with
-      // no AQI line left it would otherwise be a lone unexplained token.
+      // "Main pollutant: O3", not a bare "O3" -- same phrasing the Overview
+      // racks and the Outside headline use for the dominant pollutant, and on
+      // a card with no AQI line left it would otherwise be a lone token.
       const pollutantsBlock = pollutantsInner
         ? `<div class="fd-pollutants">${pollutantsInner}</div>`
         : (day.dominant_pollutant
-          ? `<div class="fd-pollutant">Driven by ${escapeHtml(day.dominant_pollutant)}</div>`
+          ? `<div class="fd-pollutant">Main pollutant: ${escapeHtml(day.dominant_pollutant)}</div>`
           : "");
-      // Only add a separate "driven by" line when the full breakdown is also
-      // shown -- otherwise it'd just repeat the fallback text above.
+      // Only add a separate main-pollutant line when the full breakdown is
+      // also shown -- otherwise it'd just repeat the fallback text above.
       const dominantHtml = pollutantsInner && day.dominant_pollutant
-        ? `<div class="fd-dominant">Driven by ${escapeHtml(day.dominant_pollutant)}</div>`
+        ? `<div class="fd-dominant">Main pollutant: ${escapeHtml(day.dominant_pollutant)}</div>`
         : "";
       const actionBadge = day.action_day ? '<div class="fd-action-badge">Action Day</div>' : "";
       return `<div class="forecast-day">
@@ -240,9 +257,10 @@
     const discussionText = document.getElementById("discussion-text");
     const discussionToggle = document.getElementById("discussion-toggle");
 
+    syncFallbackNote();
     const zipParam = selectedZip ? `zip=${encodeURIComponent(selectedZip)}&` : "";
     const refreshParam = force ? "&refresh=1" : "";
-    const url = `/api/forecast?${zipParam}provider=${currentProvider()}${refreshParam}`;
+    const url = `/api/forecast?${zipParam}provider=${effectiveProvider()}${refreshParam}`;
     try {
       const res = await fetch(url);
       let d;

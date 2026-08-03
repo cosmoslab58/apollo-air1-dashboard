@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-{% set page_title = "Outdoor — Apollo AIR-1" %}
+{% set page_title = "Outside — Apollo AIR-1" %}
 {% include "_partials/head.html" %}
 <body>
 
@@ -8,7 +8,7 @@
 {% set show_units_row = true %}
 {% include "_partials/chrome_header.html" %}
 
-<div class="wrap wrap--provider-bar">
+<div class="wrap">
   <main class="view view-fade">
 
     <h1 class="zone-banner zone-banner--outside">
@@ -18,7 +18,8 @@
     <div class="section">
       <div class="section-head">
         <h2 class="section-title">Current reading</h2>
-        <span class="provider-status" id="outside-updated-tech">—</span>
+        {# Doubles as the data-source picker -- see common.js's source sheet. #}
+        <button type="button" class="provider-status source-btn" id="outside-updated-tech" aria-haspopup="dialog" aria-expanded="false">—</button>
       </div>
       <div class="outside-tech-card" id="outside-tech-card" style="--edge-color: var(--hairline);">
         <div class="outside-tech-main">
@@ -105,8 +106,7 @@
   {% include "_partials/footer.html" %}
 </div>
 
-{% set show_provider_bar = true %}
-{% set active_page = "technical" %}
+{% set active_page = "outside" %}
 {% include "_partials/bottom_nav.html" %}
 
 <script src="{{ url_for('static', filename='aqi.js') }}"></script>

@@ -1,5 +1,9 @@
 <footer class="page-footer">
+  {# Repo name + Grafana are developer-facing -- they live on the Device page
+     (show_dev_footer), not on every page a houseguest sees. #}
+  {% if show_dev_footer %}
   <span>apollo-air1-dashboard</span>
   {% if grafana_url %}<a class="footer-link" href="{{ grafana_url }}" target="_blank" rel="noopener">Grafana ↗</a>{% endif %}
+  {% endif %}
   <span id="footer-clock"></span>
 </footer>

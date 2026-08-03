@@ -31,7 +31,7 @@
   //
   // "Elevated / High / Very high" say how far from normal the worst channel is,
   // which is exactly what the number means and is true of all four channels.
-  // Paired with the "Driven by X" sub-line, the user gets magnitude and cause
+  // Paired with the "Main pollutant: X" sub-line, the user gets magnitude and cause
   // without the page inventing authority.
   //
   // NOTE: intentionally not aligned with the BAND_VARS css names (good/fair/
@@ -95,10 +95,10 @@
   }
 
   /* ---------- provider switch (AirNow / Google / PurpleAir / OpenWeatherMap) ----------
-   * The chip bar itself, currentProvider(), and the shared "modechange"
-   * re-fetch all live in common.js now (the persistent bar is the same
-   * control on Overview/Outdoor/Forecast, not just this page). This page
-   * only needs to react to a provider actually changing. */
+   * The source picker itself (the "via X" stamp in the Outside rack-foot),
+   * currentProvider(), and the shared "modechange" re-fetch all live in
+   * common.js. This page only needs to react to a provider actually
+   * changing. */
   function providerLabel() {
     return PROVIDER_NAMES[currentProvider()] || "AirNow";
   }
@@ -209,12 +209,12 @@
       outAqi.style.setProperty("--band-color", bandVar(band));
       document.getElementById("outside-area").textContent = d.reporting_area || "—";
       document.getElementById("out-category").textContent = d.category || "Loading…";
-      document.getElementById("out-sub").textContent = d.dominant_pollutant ? `Driven by ${d.dominant_pollutant}` : "";
+      document.getElementById("out-sub").textContent = d.dominant_pollutant ? `Main pollutant: ${d.dominant_pollutant}` : "";
       lastOutsidePollutants = d.pollutants;
       document.getElementById("outside-rows").innerHTML = outsideRowsHtml(d.pollutants);
       // Which provider this reading is from and when it was last refreshed
-      // into the DB -- both in one place, since the persistent chip bar's
-      // highlight alone wasn't a clear enough tell of the current selection.
+      // into the DB -- both in one place, and the stamp itself is the source
+      // picker (common.js), so the name doubles as the control that changes it.
       // An Away location is fetched from the provider on demand rather than
       // polled into Influx, so it has no stored timestamp and no history --
       // which is why the sparkline is empty here too. Saying "live" is the
@@ -231,7 +231,9 @@
       document.getElementById("out-sub").textContent = "";
       lastOutsidePollutants = null;
       document.getElementById("outside-rows").innerHTML = "";
-      document.getElementById("out-updated").textContent = "";
+      // Still "via X" -- this stamp is also the source picker, and an
+      // unreachable provider is exactly when you need it to switch away.
+      document.getElementById("out-updated").textContent = `via ${providerLabel()}`;
     }
   }
 
@@ -293,7 +295,7 @@
       inAqi.textContent = typeof d.aqi === "number" ? String(Math.round(d.aqi)) : "—";
       inAqi.style.setProperty("--band-color", bandVar(band));
       document.getElementById("in-category").textContent = bandLabel(band) || "Waiting for a reading…";
-      document.getElementById("in-sub").textContent = label ? `Driven by ${label}` : "";
+      document.getElementById("in-sub").textContent = label ? `Main pollutant: ${label}` : "";
       lastInsideLatest = d;
       document.getElementById("inside-rows").innerHTML = insideRowsHtml(d);
       // When the AIR-1 last reported a reading into the DB.

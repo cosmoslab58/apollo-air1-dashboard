@@ -117,7 +117,7 @@ function worseBandName(a, b) {
 }
 
 /* The worst band across every channel the device grades, and which channel got
- * it there. Used for the Overview headline and its "Driven by X" subtitle.
+ * it there. Used for the Overview headline and its "Main pollutant: X" subtitle.
  *
  * All four channels, not just AQI and CO2 as the Overview used to compare: over
  * 2.5 days of this unit's data VOC was the worst channel 94% of the time it was
@@ -311,83 +311,131 @@ function renderAwayLocationRow() {
   el.textContent = loc ? (loc.reporting_area || loc.zip) : "Not set — pick a ZIP below";
 }
 
-/* ---------- provider chips: AirNow / Google / PurpleAir / OpenWeatherMap
- * (self-initializing wherever #provider-chips exists) ----------
- * Lives here (not per-page) so the persistent chip bar works identically on
- * every page that has one, rather than only the page that happened to define
- * it first. One shared choice across Home and Away (not per-mode) -- a
- * provider silently changing underneath you when you flip modes turned out
- * to be more confusing than useful. PROVIDER_NAMES/PROVIDER_ORDER above. */
+/* ---------- data-source picker: AirNow / Google / PurpleAir / OpenWeatherMap
+ * (self-initializing wherever a .source-btn exists) ----------
+ * The "via AirNow · Updated 19m ago" stamp on Overview/Outside/Forecast IS
+ * the picker: tapping it opens a small sheet listing all four providers,
+ * each with its own live AQI (from /api/outside/all -- one best-effort call
+ * per provider server-side, no extra upstream traffic beyond what browsing
+ * them individually would cost), so switching sources is also how you see
+ * what the other three are reading. This replaced the provider chip row that
+ * sat inside the fixed bottom nav on three of four pages: "AirNow / Google /
+ * PurpleAir / OWM" is a data-source concern, not navigation, and it doubled
+ * the height of the app's one permanently-visible surface with a row of
+ * jargon a non-technical user never needs to see.
+ * One shared choice across Home and Away (not per-mode) -- a provider
+ * silently changing underneath you when you flip modes turned out to be more
+ * confusing than useful. PROVIDER_NAMES/PROVIDER_ORDER above. */
 function currentProvider() {
   return localStorage.getItem("apollo-air1-provider") || "airnow";
 }
 
-// Each chip shows that provider's own live AQI (from /api/outside/all, one
-// best-effort call per provider server-side, no extra upstream traffic
-// beyond what browsing them individually would cost) so tapping between
-// sources is also how you see what the other three are reading -- not just a
-// blind tab switch.
-async function renderProviderChips() {
-  const wrap = document.getElementById("provider-chips");
-  if (!wrap) return;
-  const selected = currentProvider();
-  // The Forecast page marks its chip bar with this (bottom_nav.html) since
-  // it's the only place a provider with no forecast (PurpleAir) can't be
-  // picked at all -- everywhere else it's a perfectly valid live-conditions
-  // provider.
-  const restrictForecast = wrap.dataset.restrictForecast === "true";
-  try {
-    const res = await fetch(`/api/outside/all?mode=${currentMode()}`);
-    const summary = res.ok ? await res.json() : {};
-    wrap.innerHTML = PROVIDER_ORDER.map((p) => {
-      const s = summary[p] || { available: false };
-      const noForecast = restrictForecast && PROVIDERS_WITHOUT_FORECAST.has(p);
-      const color = s.available ? bandVar(s.band) : "var(--ink-dim)";
-      const aqiText = s.available && typeof s.aqi === "number" ? String(s.aqi) : "—";
-      // A dim chip alone doesn't say why -- e.g. "no healthy PurpleAir sensor
-      // nearby" vs. "no away location set" are both just "off" without this,
-      // so the reason the API already returns goes on the chip as a hover
-      // title.
-      const reasonText = !s.available && s.reason ? s.reason
-        : (noForecast ? `${PROVIDER_NAMES[p]} has no forecast` : "");
-      const titleAttr = reasonText ? ` title="${escapeHtml(reasonText)}"` : "";
-      const disabledAttr = noForecast ? " disabled" : "";
-      return `<button type="button" class="provider-chip" data-provider="${p}" aria-pressed="${p === selected}" data-unavailable="${!s.available}" data-no-forecast="${noForecast}" style="--pc-color: ${color}"${titleAttr}${disabledAttr}>` +
-        `<span class="pc-dot"></span>${PROVIDER_NAMES[p]} <span class="pc-aqi">${aqiText}</span></button>`;
-    }).join("");
-  } catch (e) {
-    // Chips just stay at their last-rendered state.
+(function initSourcePicker() {
+  if (!document.querySelector(".source-btn")) return;
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "settings-backdrop";
+  backdrop.hidden = true;
+  const sheet = document.createElement("div");
+  sheet.className = "source-sheet";
+  sheet.setAttribute("role", "dialog");
+  sheet.setAttribute("aria-label", "Outdoor data source");
+  sheet.hidden = true;
+  document.body.append(backdrop, sheet);
+
+  let openTrigger = null;
+  // Last /api/outside/all payload -- kept so a re-open renders instantly with
+  // the previous numbers while the refresh below overwrites them in place.
+  let summary = null;
+
+  function render() {
+    // The Forecast page's trigger carries data-restrict-forecast: it's the
+    // one place a provider with no forecast (PurpleAir) can't be picked at
+    // all -- everywhere else it's a perfectly valid live-conditions source.
+    const restrictForecast = !!(openTrigger && openTrigger.dataset.restrictForecast === "true");
+    sheet.innerHTML = '<div class="source-sheet-head">Outdoor data source</div>' +
+      PROVIDER_ORDER.map((p) => {
+        const s = summary && summary[p];
+        const noForecast = restrictForecast && PROVIDERS_WITHOUT_FORECAST.has(p);
+        const available = !!(s && s.available);
+        const color = available ? bandVar(s.band) : "var(--ink-dim)";
+        const aqiText = available && typeof s.aqi === "number" ? String(s.aqi) : "—";
+        // A dim row alone doesn't say why -- "no healthy PurpleAir sensor
+        // nearby" vs. "no away location set" are both just "off" without the
+        // reason the API already returns.
+        const note = noForecast ? "No forecast"
+          : (s && !s.available && s.reason ? s.reason : "");
+        return `<button type="button" class="source-row" data-provider="${p}" aria-pressed="${p === currentProvider()}" data-unavailable="${s ? !s.available : false}" style="--pc-color: ${color}"${noForecast ? " disabled" : ""}>` +
+          `<span class="pc-dot"></span><span class="source-row-name">${PROVIDER_NAMES[p]}</span>` +
+          (note ? `<span class="source-row-note">${escapeHtml(note)}</span>` : "") +
+          `<span class="pc-aqi">${aqiText}</span></button>`;
+      }).join("");
   }
-}
+
+  async function refreshSummary() {
+    try {
+      const res = await fetch(`/api/outside/all?mode=${currentMode()}`);
+      if (res.ok) summary = await res.json();
+    } catch (e) { /* keep the last summary */ }
+  }
+
+  function openSheet(trigger) {
+    openTrigger = trigger;
+    render(); // instant, from the last summary (bare names on the first open)
+    sheet.hidden = false;
+    backdrop.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    refreshSummary().then(() => { if (!sheet.hidden) render(); });
+  }
+  function closeSheet() {
+    sheet.hidden = true;
+    backdrop.hidden = true;
+    if (openTrigger) openTrigger.setAttribute("aria-expanded", "false");
+    openTrigger = null;
+  }
+
+  document.addEventListener("click", (e) => {
+    const trigger = e.target.closest(".source-btn");
+    if (trigger) {
+      if (sheet.hidden) openSheet(trigger); else closeSheet();
+      return;
+    }
+    const row = e.target.closest(".source-row");
+    if (row && !row.disabled) {
+      setProvider(row.getAttribute("data-provider"));
+      closeSheet();
+    }
+  });
+  backdrop.addEventListener("click", closeSheet);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !sheet.hidden) closeSheet();
+  });
+
+  // The mode rail flips the whole outside half of the app to another
+  // location's data -- each provider's availability/AQI needs a re-fetch for
+  // the new location, and the numbers cached from the old one would lie.
+  document.addEventListener("modechange", () => {
+    summary = null;
+    if (!sheet.hidden) refreshSummary().then(render);
+  });
+})();
 
 function setProvider(provider) {
   localStorage.setItem("apollo-air1-provider", provider);
-  renderProviderChips();
   updateForecastLink();
   document.dispatchEvent(new CustomEvent("providerchange"));
 }
 
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest(".provider-chip");
-  if (!btn || btn.disabled) return;
-  setProvider(btn.getAttribute("data-provider"));
-});
-
-// The mode rail flips the whole outside half of the app to another
-// location's data -- each provider's availability/AQI in the chips needs a
-// re-fetch for the new location.
-document.addEventListener("modechange", renderProviderChips);
-
 /* ---------- tab bar's Forecast link ---------- */
 // One shared handler for every page's bottom tab bar: in Away mode the tab
-// points at the away location's forecast, and it hides entirely for
-// providers that publish no forecast (PurpleAir). Pages that can change the
-// inputs (dashboard's provider chips, the mode rail) call this again on top
-// of the init below.
+// points at the away location's forecast. The tab never hides -- a nav item
+// that vanishes based on a setting you may not remember touching is the most
+// disorienting thing an app can do. For providers that publish no forecast
+// (PurpleAir) the Forecast page itself falls back to AirNow with a note (see
+// forecast.js).
 function updateForecastLink() {
   const link = document.getElementById("forecast-link");
   if (!link) return;
-  link.hidden = PROVIDERS_WITHOUT_FORECAST.has(localStorage.getItem("apollo-air1-provider") || "airnow");
   const awayLoc = currentMode() === "away" ? getAwayLoc() : null;
   link.href = awayLoc ? `/forecast?zip=${encodeURIComponent(awayLoc.zip)}` : "/forecast";
 }
@@ -576,8 +624,3 @@ if ("serviceWorker" in navigator) {
 renderThemeToggle();
 // Reflect the saved readout choice on the pages that show the toggle.
 renderReadoutToggle();
-// Initial chip render (no-ops on pages with no #provider-chips) + the same
-// 15-minute refresh cadence each page already polls its own outside reading
-// at, so the chips' live AQI values don't go stale sitting in the fixed bar.
-renderProviderChips();
-pollInterval(renderProviderChips, 15 * 60000);

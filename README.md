@@ -2,11 +2,14 @@
 
 Flask app for the Apollo AIR-1 air quality sensor: current readings + history
 from InfluxDB, live device controls over MQTT, and an outdoor AQI comparison
-via AirNow. No Home Assistant, no Grafana — self-contained. Two views: a
-plain-language **Simple** view for anyone in the house, and a **Technical**
-view with full instrument readouts, calibration controls, and history charts
-— reaching parity with (and extending) the device's own onboard ESPHome web
-UI.
+via AirNow. No Home Assistant, no Grafana — self-contained. Five pages:
+**Overview** (a plain-language Inside/Outside pair, each card tappable
+through to its details), **Inside** and **Outside** (full instrument
+readouts and history charts), **Forecast**, and a **Device** page
+(diagnostics, LED key, calibration and other setup controls — reaching
+parity with, and extending, the device's own onboard ESPHome web UI) reached
+from the settings gear. The outdoor data source (AirNow/Google/PurpleAir/OWM)
+is picked from the "via X" stamp next to any outside reading.
 
 ```
 Apollo AIR-1  <-->  mosquitto  -->  Node-RED  -->  InfluxDB (air_quality)  -->  this app

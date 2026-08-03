@@ -1,11 +1,34 @@
 <div class="bottom-nav">
-  {% if show_provider_bar %}
-  <div class="provider-chips" id="provider-chips"{% if active_page == "forecast" %} data-restrict-forecast="true"{% endif %}></div>
-  {% endif %}
   <nav class="tab-bar" aria-label="Pages">
-    <a href="/"{% if active_page == "overview" %} aria-current="page"{% endif %}>Overview</a>
-    <a href="/indoor"{% if active_page == "indoor" %} aria-current="page"{% endif %}>Indoor</a>
-    <a href="/outdoor"{% if active_page == "technical" %} aria-current="page"{% endif %}>Outdoor</a>
-    <a href="/forecast" id="forecast-link"{% if active_page == "forecast" %} aria-current="page"{% endif %}>Forecast</a>
+    {# Icon + label, the standard mobile bottom-nav pattern -- this is an
+       installed PWA on phones, and four text-only tabs read as buttons
+       rather than navigation. Same stroke language as the settings gear.
+       Labels say Inside/Outside to match the zone banners and rack headings
+       they lead to -- the tab is a promise about the page's h1. #}
+    <a href="/"{% if active_page == "overview" %} aria-current="page"{% endif %}>
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/>
+        <rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>
+      </svg>
+      <span>Overview</span>
+    </a>
+    <a href="/indoor"{% if active_page == "inside" %} aria-current="page"{% endif %}>
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>
+      </svg>
+      <span>Inside</span>
+    </a>
+    <a href="/outdoor"{% if active_page == "outside" %} aria-current="page"{% endif %}>
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3l5.5 7h-3l4 6.5H5.5l4-6.5h-3z"/><path d="M12 16.5V21"/>
+      </svg>
+      <span>Outside</span>
+    </a>
+    <a href="/forecast" id="forecast-link"{% if active_page == "forecast" %} aria-current="page"{% endif %}>
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="6" width="16" height="15" rx="2"/><path d="M4 11h16M8 3.5V8M16 3.5V8"/>
+      </svg>
+      <span>Forecast</span>
+    </a>
   </nav>
 </div>
