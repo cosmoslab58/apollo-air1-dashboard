@@ -184,6 +184,26 @@
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
+  /* The only controls in the app with no pointer feedback at all -- the
+     buttons elsewhere all shift background on hover, so four tabs that stayed
+     inert under the cursor read as labels rather than links. Deliberately
+     weaker than the selected state's accent wash so hovering an inactive tab
+     never looks like it has already become the current page. hover:hover
+     keeps it off touch screens, where a "hover" is a tap that has already
+     navigated and the style would just flash. */
+  /* A mix of --ink rather than --panel-sunken: sunken-on-panel is a ~2%
+     luminance step in dark mode (#0f1113 on #14171a), so the state was
+     applying and still looked like nothing had happened. Mixing the ink
+     colour in moves the surface toward the text either way -- lighter in dark
+     mode, darker in light -- so one declaration reads on both themes. */
+  @media (hover: hover) {
+    .tab-bar a:hover, .provider-chip:not([aria-pressed="true"]):not([data-no-forecast="true"]):hover {
+      background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--ink);
+    }
+    .tab-bar a[aria-current="page"]:hover {
+      background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
+    }
+  }
   /* .tab-bar a sets an explicit display, which overrides the UA [hidden]
      display:none -- without this rule, updateForecastLink's link.hidden = true
      (used to hide the Forecast tab for providers with no forecast) has no
@@ -280,7 +300,16 @@
     animation: settingsin 140ms ease both;
   }
   .settings-panel[hidden] { display: none; }
-  @keyframes settingsin { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  /* The panel's own box no longer fades -- only its contents do. Fading the
+     panel faded its background with it, so for the first ~100ms the page
+     showed straight through the popover and the two sets of text overlapped;
+     caught mid-animation it looked like a rendering fault rather than a
+     transition. The opaque surface is now there on the first frame and the
+     movement carries the animation, with the children's fade keeping it from
+     feeling like a hard cut. */
+  @keyframes settingsin { from { transform: translateY(-4px) scale(0.98); } to { transform: translateY(0) scale(1); } }
+  .settings-panel > * { animation: settingscontentin 140ms ease both; }
+  @keyframes settingscontentin { from { opacity: 0; } to { opacity: 1; } }
   /* Anchoring the popover under the gear needs JS to read its on-screen
      position -- fragile on phones (dynamic toolbars, safe-area insets move
      the viewport under it). Below the breakpoint it becomes a plain bottom
@@ -293,7 +322,8 @@
       width: auto; max-height: calc(100vh - 24px); overflow-y: auto;
       animation: settingsheetup 180ms ease both;
     }
-    @keyframes settingsheetup { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    /* Same reasoning as settingsin above: the sheet slides, its contents fade. */
+    @keyframes settingsheetup { from { transform: translateY(12px); } to { transform: translateY(0); } }
   }
   .settings-panel-head {
     font-size: 0.75rem;
@@ -833,6 +863,24 @@
    dashboard's rack-foot -- an empty state (no discussion/guidance for
    this provider) should take no space rather than leave a gap. */
 .outside-discussion:empty { display: none; }
+/* Everything else on Outdoor is on a raised panel; this block -- the health
+   guidance for the current band, plus the forecaster's discussion on the
+   providers that publish one -- was bare text lying directly on the page
+   background between two cards, so it read as something that had escaped its
+   container. Same surface as its neighbours, so the page is cards all the way
+   down. :not(:empty) rather than the bare class, or the rule above would be
+   drawing an empty box on the providers that supply neither. */
+.outside-discussion:not(:empty) {
+  background: var(--panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-top: 14px;
+}
+/* The card supplies the separation now, so the discussion's own rule-and-gap
+   would be a second divider a few pixels inside the first. */
+.outside-discussion > .forecast-discussion:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+.outside-discussion > .health-guidance:first-child { margin-top: 0; border-top: none; padding-top: 0; }
 /* "Updated Xm ago" freshness stamp at the left of the foot. Recomputed on
    each poll -- it doesn't tick between fetches. */
 .rack-updated { font-size: 0.75rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; }

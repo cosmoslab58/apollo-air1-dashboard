@@ -51,7 +51,12 @@
    * noise. Just enough to show "trending up/down/flat" at a glance. */
   function renderMiniSpark(el, points, band) {
     if (!el) return;
-    if (!points || points.length === 0) { el.innerHTML = ""; return; }
+    // hidden, not just emptied: below 260px of column the sparkline is a
+    // full-width 36px row of its own, so an Away location (no history to
+    // draw) left a dead band inside the Outside card that read as a chart
+    // that had failed to render. Nothing to show, so it takes no space.
+    if (!points || points.length === 0) { el.innerHTML = ""; el.hidden = true; return; }
+    el.hidden = false;
     const w = el.clientWidth || 84, h = el.clientHeight || 34;
     // A single sample (common for the sparse AirNow feed in a short window)
     // can't draw a trend line -- show a centered dot so the tile reads as
@@ -210,9 +215,16 @@
       // Which provider this reading is from and when it was last refreshed
       // into the DB -- both in one place, since the persistent chip bar's
       // highlight alone wasn't a clear enough tell of the current selection.
+      // An Away location is fetched from the provider on demand rather than
+      // polled into Influx, so it has no stored timestamp and no history --
+      // which is why the sparkline is empty here too. Saying "live" is the
+      // honest version of that: dropping silently to "via AirNow" next to
+      // Inside's "Updated just now" read as a freshness stamp that had failed
+      // to load, rather than a reading that was never logged in the first
+      // place.
       document.getElementById("out-updated").textContent = d.time
         ? `via ${providerLabel()} · Updated ${timeAgo(d.time)}`
-        : `via ${providerLabel()}`;
+        : `via ${providerLabel()} · live`;
     } catch (e) {
       document.getElementById("out-aqi").textContent = "—";
       document.getElementById("out-category").textContent = apiErrorMsg || ("Couldn't reach " + providerLabel() + ".");

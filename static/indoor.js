@@ -163,14 +163,23 @@
       if (typeof rawValue === "number" && typeof prevRawValue === "number" && rawValue !== prevRawValue) {
         dir = rawValue > prevRawValue ? "up" : "down";
       }
-      const arrow = dir === "up" ? "↑" : dir === "down" ? "↓" : "→";
+      // "–" for flat, not "→". A right-pointing arrow in a tile's top-right
+      // corner is where every other interface in the world puts "open this",
+      // and it read as one -- clicked expecting navigation, got nothing. The
+      // up/down arrows were never ambiguous (nothing navigates upward), so
+      // only the flat case changes, to the glyph that already means "no
+      // change" beside a figure.
+      const arrow = dir === "up" ? "↑" : dir === "down" ? "↓" : "–";
+      // The glyph alone is decoration to a screen reader. Naming the direction
+      // is also what makes it legible to anyone who reads "–" as a hyphen.
+      const trendLabel = dir === "up" ? "trending up" : dir === "down" ? "trending down" : "no change";
       const bandKey = typeof rawValue === "number" ? r.band(rawValue) : null;
       const value = typeof r.convert === "function" ? r.convert(rawValue) : rawValue;
       const unit = typeof r.unit === "function" ? r.unit() : r.unit;
       const label = typeof r.label === "function" ? r.label() : r.label;
       const decimals = typeof r.decimals === "function" ? r.decimals() : r.decimals;
       return `<div class="readout" style="--edge-color: ${bandKey ? `var(--${bandKey})` : "var(--hairline)"}">
-        <div class="r-label"><span>${label}</span><span class="trend" data-dir="${dir}">${arrow}</span></div>
+        <div class="r-label"><span>${label}</span><span class="trend" data-dir="${dir}" role="img" aria-label="${trendLabel}" title="${trendLabel} since the last reading">${arrow}</span></div>
         <div class="r-value">${fmt(value, decimals)}<span class="r-unit">${unit}</span></div>
       </div>`;
     }).join("");
