@@ -94,11 +94,20 @@
     font-weight: 500;
   }
 
+  /* For headings the page structure needs but the design doesn't show -- see
+     Overview's h1. Clipped to a 1px box rather than display:none or
+     visibility:hidden, both of which take the element out of the accessibility
+     tree along with the layout, which would defeat the point. */
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+
   /* Bottom padding clears the fixed tab bar (plus phone home-indicator
      inset) so the footer is never trapped underneath it. */
   /* The two halves of the sticky-footer arrangement started on body above:
      .wrap takes every pixel the header leaves, and .view (never more than one
-     per page -- every template is a single <section class="view"> plus the
+     per page -- every template is a single <main class="view"> plus the
      footer partial) takes every pixel its own content doesn't. flex-shrink 0
      on both so a long page still overflows and scrolls normally rather than
      being squeezed into the viewport. page-footer keeps its own margin-top,
@@ -319,7 +328,11 @@
   .section { margin-top: 40px; }
   .section:first-child { margin-top: 0; }
   .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-  .section-title { font-size: 1rem; font-weight: 600; color: var(--ink); }
+  /* These are real <h2>s now (and the chart/control card titles under them real
+     <h3>s), so every rule that gives them their look has to also cancel the UA
+     heading defaults -- margin above all, which would otherwise reopen the gap
+     .section-head's own spacing already sets. */
+  .section-title { font-size: 1rem; font-weight: 600; color: var(--ink); margin: 0; }
   .section-note { font-size: 0.875rem; color: var(--ink-dim); }
   .readout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .readout {
@@ -525,7 +538,7 @@
   .chart-card {
     padding: 16px 18px 10px; margin-bottom: 12px;
   }
-  .chart-card h4 { margin: 0 0 10px; font-size: 0.875rem; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .chart-card h3 { margin: 0 0 10px; font-size: 0.875rem; font-weight: 600; display: flex; align-items: center; gap: 10px; }
   .chart-svg-wrap { width: 100%; overflow-x: auto; }
   .chart-svg-wrap svg { display: block; width: 100%; height: auto; }
   .chart-grid-line { stroke: var(--hairline); stroke-width: 1; }
@@ -583,7 +596,9 @@
 }
 .zone-banner { margin: 40px 0 14px; }
 .zone-banner:first-child { margin-top: 0; }
-.rack-zone { flex-wrap: wrap; margin-bottom: 12px; }
+/* margin-top: 0 cancels the UA h2 margin -- .zone-banner sets all four sides
+   itself so it needs no equivalent, but this one only ever set the bottom. */
+.rack-zone { flex-wrap: wrap; margin: 0 0 12px; }
 .zone-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .zone-banner--inside .zone-dot, .rack--inside .zone-dot { background: var(--accent); }
 .zone-banner--outside .zone-dot, .rack--outside .zone-dot { background: var(--zone-outside); }
@@ -958,7 +973,15 @@
      visible box exactly where it was so surrounding spacing doesn't shift. */
   display: inline-block; padding: 9px 6px; margin: -9px -6px;
 }
-.forecast-discussion p { white-space: pre-line; font-size: 0.875rem; color: var(--ink-dim); margin: 10px 0 0; }
+/* max-width in ch, not px: this is four paragraphs of continuous prose, and at
+   the card's full desktop width it ran to ~130 characters a line -- roughly
+   double a comfortable measure, far enough that the eye loses its place
+   returning to the next line. Everything else on the page is a label or a
+   figure, so this is the one place a reading measure matters. */
+.forecast-discussion p {
+  white-space: pre-line; font-size: 0.875rem; color: var(--ink-dim);
+  margin: 10px 0 0; max-width: 68ch;
+}
 
 /* Fine-print note under the Home location form (Indoor page). */
 .away-hint { margin: 12px 0 0; color: var(--ink-dim); line-height: 1.4; }

@@ -186,17 +186,28 @@
       sharedGuidanceEl.innerHTML = "";
     }
     daysEl.innerHTML = d.days.map((day) => {
-      // The day headline is always the AQI number (there's no single
-      // concentration for a whole day); the readout toggle only affects the
-      // per-pollutant breakdown below.
-      const aqiText = day.aqi != null ? `AQI ${day.aqi}` : "AQI —";
+      // The day headline is the AQI number when there is one (there's no
+      // single concentration for a whole day); the readout toggle only affects
+      // the per-pollutant breakdown below.
+      // AirNow routinely forecasts a category without a number -- AQI: -1 on
+      // every row, which airnow.py maps to null (see its Category.Number
+      // fallback). Rendering "AQI —" for that put a placeholder dash directly
+      // under a perfectly good "Moderate", which reads as a value that failed
+      // to load rather than one the agency never issued. The category badge
+      // already carries the day, so the line just goes.
+      const aqiHtml = day.aqi != null ? `<div class="fd-aqi">AQI ${day.aqi}</div>` : "";
       // Render the breakdown first: in AQI mode it can come back empty (every
       // pollutant filtered out as non-convertible), in which case fall back to
       // just naming the dominant pollutant.
       const pollutantsInner = pollutantsHtml(day.pollutants);
+      // "Driven by O3", not a bare "O3" -- same phrasing the Overview racks and
+      // the Outdoor headline use for the dominant pollutant, and on a card with
+      // no AQI line left it would otherwise be a lone unexplained token.
       const pollutantsBlock = pollutantsInner
         ? `<div class="fd-pollutants">${pollutantsInner}</div>`
-        : `<div class="fd-pollutant">${escapeHtml(day.dominant_pollutant || "—")}</div>`;
+        : (day.dominant_pollutant
+          ? `<div class="fd-pollutant">Driven by ${escapeHtml(day.dominant_pollutant)}</div>`
+          : "");
       // Only add a separate "driven by" line when the full breakdown is also
       // shown -- otherwise it'd just repeat the fallback text above.
       const dominantHtml = pollutantsInner && day.dominant_pollutant
@@ -207,7 +218,7 @@
         <div class="fd-label">${dayLabel(day.date)}</div>
         ${actionBadge}
         <div class="fd-badge" style="--band-color: ${bandVar(day.band)}">${escapeHtml(day.category)}</div>
-        <div class="fd-aqi">${aqiText}</div>
+        ${aqiHtml}
         ${dominantHtml}
         ${pollutantsBlock}
         ${guidanceIsShared ? "" : healthRecommendationsHtml(day.health_recommendations, true)}

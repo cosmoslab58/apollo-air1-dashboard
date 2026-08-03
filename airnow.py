@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import UTC, datetime, timedelta
 
 import requests
@@ -114,6 +115,18 @@ _ROW_POLLUTANT_FIELDS = [
 ]
 
 
+_DISCUSSION_HEADING = re.compile(r"^\s*FORECAST DISCUSSION\s*:\s*", re.IGNORECASE)
+
+
+def _clean_discussion(text):
+    """AirNow's Discussion field arrives with its own "FORECAST DISCUSSION:"
+    heading and CRLF line endings. The heading duplicates the disclosure the UI
+    already puts above the text, and a stray \\r renders as a blank line under
+    the CSS's white-space: pre-line -- so both go here, once, rather than in
+    each of the two page scripts that display this."""
+    return _DISCUSSION_HEADING.sub("", text.replace("\r\n", "\n").replace("\r", "\n")).strip()
+
+
 def observation_from_row(row):
     """Build the same current-observation shape _fetch returns, but from a
     stored InfluxDB row (influx.query_airnow_latest) instead of a live AirNow
@@ -164,7 +177,7 @@ def _fetch_forecast(zip_code):
     for r in rows:
         by_date.setdefault(r["DateForecast"], []).append(r)
         if not discussion and (r.get("Discussion") or "").strip():
-            discussion = r["Discussion"].strip()
+            discussion = _clean_discussion(r["Discussion"])
 
     days = []
     for date in sorted(by_date):

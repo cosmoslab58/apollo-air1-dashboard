@@ -90,3 +90,15 @@ def test_format_reporting_area_regional_gets_full_state_name():
     assert airnow._format_reporting_area("Southeast", "MI") == "Southeast Michigan"
     # A normal city keeps the "City, ST" abbreviation.
     assert airnow._format_reporting_area("Rhinelander", "WI") == "Rhinelander, WI"
+
+
+def test_clean_discussion_strips_agency_heading_and_crlf():
+    # AirNow prefixes its own heading and uses CRLF; the UI already labels this
+    # text with a "Forecaster's discussion" disclosure, and a stray \r renders
+    # as a blank line under the CSS's white-space: pre-line.
+    raw = "FORECAST DISCUSSION: \r\nAugust is upon us.\r\nOzone stays Moderate.\r\n"
+    assert airnow._clean_discussion(raw) == "August is upon us.\nOzone stays Moderate."
+
+
+def test_clean_discussion_leaves_text_without_a_heading_alone():
+    assert airnow._clean_discussion("  Ozone stays Moderate.  ") == "Ozone stays Moderate."

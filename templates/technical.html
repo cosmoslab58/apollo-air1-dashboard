@@ -9,15 +9,15 @@
 {% include "_partials/chrome_header.html" %}
 
 <div class="wrap wrap--provider-bar">
-  <section class="view view-fade">
+  <main class="view view-fade">
 
-    <div class="zone-banner zone-banner--outside">
+    <h1 class="zone-banner zone-banner--outside">
       <span class="zone-dot"></span> Outside <span class="zone-sub">— near <span id="outside-area-tech">—</span></span>
-    </div>
+    </h1>
 
     <div class="section">
       <div class="section-head">
-        <span class="section-title">Current reading</span>
+        <h2 class="section-title">Current reading</h2>
         <span class="provider-status" id="outside-updated-tech">—</span>
       </div>
       <div class="outside-tech-card" id="outside-tech-card" style="--edge-color: var(--hairline);">
@@ -59,7 +59,7 @@
          this section and the weather section below. -->
     <div class="section">
       <div class="section-head">
-        <span class="section-title">History</span>
+        <h2 class="section-title">History</h2>
         <div class="range-toggle" id="range-toggle-outside">
           <button type="button" data-range="6" aria-pressed="false">6h</button>
           <button type="button" data-range="24" aria-pressed="true">24h</button>
@@ -68,18 +68,18 @@
         </div>
       </div>
       <div class="chart-card" id="card-outside-aqi-history">
-        <h4>AQI <span class="eyebrow" id="aqi-legend">faded = inside, solid = outside</span></h4>
+        <h3>AQI <span class="eyebrow" id="aqi-legend">faded = inside, solid = outside</span></h3>
         <div class="chart-svg-wrap" id="chart-outside-aqi-history"></div>
       </div>
       <div class="chart-card" id="card-outside-pm-history">
-        <h4>PM2.5 / PM10 <span class="eyebrow" id="pm-history-unit-label">AQI per pollutant</span></h4>
+        <h3>PM2.5 / PM10 <span class="eyebrow" id="pm-history-unit-label">AQI per pollutant</span></h3>
         <div class="chart-svg-wrap" id="chart-outside-pm-history"></div>
       </div>
       <!-- Everything beyond PM2.5/PM10 -- O3/SO2 have no indoor sensor at
            all, and CO/NO2 would need the optional MICS-4514 this unit
            doesn't have, so none of these ever overlay against Inside. -->
       <div class="chart-card" id="card-outside-pollutants">
-        <h4>Gas pollutants <span class="eyebrow" id="pollutants-unit-label">AQI per pollutant</span></h4>
+        <h3>Gas pollutants <span class="eyebrow" id="pollutants-unit-label">AQI per pollutant</span></h3>
         <div class="chart-svg-wrap" id="chart-outside-pollutants"></div>
       </div>
     </div>
@@ -92,7 +92,7 @@
          mode (see technical.js's applyModeVisibility). -->
     <div class="section" id="section-inside-outside-weather">
       <div class="section-head">
-        <span class="section-title">Temperature, humidity, pressure</span>
+        <h2 class="section-title">Temperature, humidity, pressure</h2>
         <span class="section-note">Your sensor only · same range as above</span>
       </div>
       <div class="chart-card">
@@ -100,7 +100,7 @@
       </div>
     </div>
 
-  </section>
+  </main>
 
   {% include "_partials/footer.html" %}
 </div>

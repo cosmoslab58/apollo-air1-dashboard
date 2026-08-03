@@ -14,7 +14,15 @@
 
 const CHART_H = 170, CHART_PAD = { l: 38, r: 4, t: 10, b: 20 };
 const ROW_H = 58, ROW_PAD_TOP = 17, ROW_PAD_BOTTOM = 8;
-const ROW_PAD = { l: 2, r: 4 };
+// r leaves room for each lane's own scale (see rowScaleLabels). The single-
+// series renderChart below has carried a labelled y-axis all along; the lane
+// charts had none, so a spike told you something happened but never how big --
+// and since every lane auto-scales to its own min/max, two lanes with the same
+// visual amplitude could differ by orders of magnitude. Endpoint labels rather
+// than renderChart's four gridlines: a 33px-tall lane has no room for gridlines
+// that wouldn't read as noise.
+const ROW_PAD = { l: 2, r: 46 };
+const ROW_SCALE_GAP = 6;
 
 function measureWidth(el) {
   return Math.max(el.clientWidth, 240);
@@ -80,6 +88,27 @@ function downsampleForDisplay(points, tMin, tMax, pxWidth, targetPxPerPoint = 3)
   }
   if (count > 0) out.push({ t: sumT / count, v: sumV / count });
   return out;
+}
+
+// One lane's y-scale, annotated at the highest and lowest values it actually
+// plots. Shared by both lane renderers so a stacked chart and an Inside/Outside
+// overlay are annotated identically.
+//
+// vMin/vMax, deliberately, not the lo/hi the line is drawn against: those carry
+// the 12% headroom padding, which is a drawing device rather than a
+// measurement, and labelling it puts numbers on screen that were never read --
+// a CO2 lane whose real span was 590-6500ppm came out claiming -467 at the
+// bottom. Each label sits at its own value's y position (so it is inset from
+// the lane edge by exactly that padding), which is what makes it an annotation
+// of the data rather than of the drawing.
+function rowScaleLabels(yAt, vMin, vMax, decimals, W) {
+  const x = (W - ROW_PAD.r + ROW_SCALE_GAP).toFixed(1);
+  // Baseline sits at the text's bottom, so +4 centres a ~11px label on the
+  // point it marks rather than hanging it above.
+  const label = (v) => `<text class="chart-axis-label chart-y-label" x="${x}" y="${(yAt(v) + 4).toFixed(1)}">${fmt(v, decimals)}</text>`;
+  // A dead-flat lane has one value, not a range -- two identical labels at the
+  // same y would just overprint each other.
+  return vMax === vMin ? label(vMax) : label(vMax) + label(vMin);
 }
 
 // series: [{ color, points: [{t, v}], area }] -- one shared y-scale, grid +
@@ -170,6 +199,7 @@ function renderRowChart(el, rows, opts) {
     const ex = xAt(last.t), ey = yAt(last.v);
     svg += `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${lastColor}" stroke="var(--panel-raised)" stroke-width="1.5" />`;
     svg += `<circle cx="${(ROW_PAD.l + 3).toFixed(1)}" cy="${dotY.toFixed(1)}" r="3" fill="${lastColor}" />`;
+    svg += rowScaleLabels(yAt, vMin, vMax, r.decimals, W);
     svg += `<text class="chart-axis-label" x="${(ROW_PAD.l + 10).toFixed(1)}" y="${labelY.toFixed(1)}">${escapeHtml(r.label)} <tspan style="fill:${lastColor}">${fmt(last.v, r.decimals)}${r.unit}</tspan></text>`;
   });
   const bottomY = nonEmpty.length * ROW_H + 10;
@@ -252,6 +282,9 @@ function renderOverlayRowChart(el, rows, opts) {
 
     const lastIn = drawSeries(r.inside, true);
     const lastOut = drawSeries(r.outside, false);
+    // One scale per lane here too -- Inside and Outside share it, which is the
+    // point of overlaying them, so a single pair of labels covers both.
+    svg += rowScaleLabels(yAt, vMin, vMax, r.decimals, W);
     const inColor = lastIn ? bandVar(r.inside.bandFor(lastIn.v)) : "var(--ink-dim)";
     const outColor = lastOut ? bandVar(r.outside.bandFor(lastOut.v)) : "var(--ink-dim)";
     const inText = lastIn ? `In ${fmt(lastIn.v, r.decimals)}${r.unit}` : "In —";

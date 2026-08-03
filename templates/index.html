@@ -14,12 +14,18 @@
 <div class="wrap wrap--provider-bar">
 
   <!-- ============ BASIC VIEW ============ -->
-  <section class="view view-fade" id="view-simple">
+  <main class="view view-fade" id="view-simple">
+    {# The other three pages open with a visible zone banner that doubles as
+       their h1; Overview's subject is the Inside/Outside pair itself, and a
+       title above two cards that already say "Inside" and "Outside" would be
+       redundant on screen. Hidden rather than absent so the page still starts
+       at h1 for a screen reader, and the rack headings below stay h2. #}
+    <h1 class="visually-hidden">Air quality overview</h1>
     <div class="rack-grid">
 
       <div class="rack rack--inside">
         <div class="rack-head">
-          <div class="rack-zone"><span class="zone-dot"></span> Inside</div>
+          <h2 class="rack-zone"><span class="zone-dot"></span> Inside</h2>
           <div class="rack-stat">
             <span class="rack-aqi" id="in-aqi" style="--band-color: var(--ink-dim);">—</span>
             <div class="rack-stat-text">
@@ -37,7 +43,7 @@
 
       <div class="rack rack--outside">
         <div class="rack-head">
-          <div class="rack-zone"><span class="zone-dot"></span> Outside <span class="rack-area" id="outside-area">—</span></div>
+          <h2 class="rack-zone"><span class="zone-dot"></span> Outside <span class="rack-area" id="outside-area">—</span></h2>
           <div class="rack-stat">
             <span class="rack-aqi" id="out-aqi" style="--band-color: var(--ink-dim);">—</span>
             <div class="rack-stat-text">
@@ -54,7 +60,7 @@
       </div>
 
     </div>
-  </section>
+  </main>
 
   {% include "_partials/footer.html" %}
 </div>

@@ -1,10 +1,13 @@
-const CACHE_NAME = "apollo-air1-shell-v6";
+const CACHE_NAME = "apollo-air1-shell-v7";
 const SHELL_FILES = [
   "/static/fonts/instrument-sans.woff2",
   "/static/fonts/martian-mono.woff2",
   "/",
   "/forecast",
-  "/technical",
+  // Canonical URL, not /technical -- precaching the old path would store a 301
+  // under it and leave the real page uncached. /technical still redirects for
+  // anything already bookmarked.
+  "/outdoor",
   "/indoor",
   "/static/style.css",
   "/static/aqi.js",

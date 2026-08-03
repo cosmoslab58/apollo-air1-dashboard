@@ -9,15 +9,15 @@
 {% include "_partials/chrome_header.html" %}
 
 <div class="wrap">
-  <section class="view view-fade">
+  <main class="view view-fade">
 
-    <div class="zone-banner zone-banner--inside">
+    <h1 class="zone-banner zone-banner--inside">
       <span class="zone-dot"></span> Inside <span class="zone-sub">— bedroom sensor</span>
-    </div>
+    </h1>
 
     <div class="section">
       <div class="section-head">
-        <span class="section-title">Live readout</span>
+        <h2 class="section-title">Live readout</h2>
         <span class="section-note">Last reading <strong id="since-reading">—</strong></span>
       </div>
       <div class="readout-grid" id="readout-grid"></div>
@@ -25,7 +25,7 @@
 
     <div class="section">
       <div class="section-head">
-        <span class="section-title">History</span>
+        <h2 class="section-title">History</h2>
         <div class="range-toggle" id="range-toggle">
           <button type="button" data-range="6" aria-pressed="false">6h</button>
           <button type="button" data-range="24" aria-pressed="true">24h</button>
@@ -35,27 +35,27 @@
       </div>
 
       <div class="chart-card">
-        <h4>AQI</h4>
+        <h3>AQI</h3>
         <div class="chart-svg-wrap" id="chart-aqi"></div>
       </div>
       <div class="chart-card">
-        <h4>PM2.5 / PM10 <span class="eyebrow" id="pm-chart-unit-label">AQI per pollutant</span></h4>
+        <h3>PM2.5 / PM10 <span class="eyebrow" id="pm-chart-unit-label">AQI per pollutant</span></h3>
         <div class="chart-svg-wrap" id="chart-pm"></div>
       </div>
       <div class="chart-card">
-        <h4>PM1.0 / PM4.0 <span class="eyebrow">µg/m³</span></h4>
+        <h3>PM1.0 / PM4.0 <span class="eyebrow">µg/m³</span></h3>
         <div class="chart-svg-wrap" id="chart-pm-fine"></div>
       </div>
       <div class="chart-card">
-        <h4>CO2 <span class="eyebrow">ppm</span></h4>
+        <h3>CO2 <span class="eyebrow">ppm</span></h3>
         <div class="chart-svg-wrap" id="chart-co2"></div>
       </div>
       <div class="chart-card">
-        <h4>VOC / NOx index</h4>
+        <h3>VOC / NOx index</h3>
         <div class="chart-svg-wrap" id="chart-voc"></div>
       </div>
       <div class="chart-card">
-        <h4>Temperature, humidity, pressure</h4>
+        <h3>Temperature, humidity, pressure</h3>
         <div class="chart-svg-wrap" id="chart-weather"></div>
       </div>
     </div>
@@ -75,7 +75,7 @@
     </div>
 
     <div class="section">
-      <div class="section-head"><span class="section-title">Device activity</span></div>
+      <div class="section-head"><h2 class="section-title">Device activity</h2></div>
       <div class="activity-card">
         <span class="act-title">No live log feed</span>
         <p>Connect to the device's local IP to watch <code>ESP_LOG</code> output in real time — this dashboard only gets one snapshot per wake cycle.</p>
@@ -84,7 +84,7 @@
 
     <div class="section">
       <div class="section-head">
-        <span class="section-title">LED color key</span>
+        <h2 class="section-title">LED color key</h2>
         <span class="section-note">Indicator mode shows the worst band across all four channels</span>
       </div>
       <div class="table-wrap">
@@ -187,7 +187,7 @@
 
     <div class="section">
       <div class="section-head">
-        <span class="section-title">Setup</span>
+        <h2 class="section-title">Setup</h2>
         <span class="section-note" id="controls-status" hidden></span>
       </div>
       <div class="control-groups">
@@ -304,7 +304,7 @@
       </div>
     </div>
 
-  </section>
+  </main>
 
   {% include "_partials/footer.html" %}
 </div>

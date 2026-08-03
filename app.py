@@ -4,7 +4,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 import airnow
 import aq_shared
@@ -82,9 +82,20 @@ def forecast_page():
     return render_template("forecast.html")
 
 
+@app.route("/outdoor")
+def outdoor_page():
+    return render_template("technical.html")
+
+
 @app.route("/technical")
 def technical_page():
-    return render_template("technical.html")
+    """The tab has said "Outdoor" since this stopped being the catch-all
+    Technical view, but the URL still said /technical -- visible in the address
+    bar and in any link shared from it. /outdoor is canonical now; this keeps
+    old bookmarks and the installed PWA's saved state working rather than 404ing
+    them. Permanent, so browsers stop asking. (The template and page script keep
+    their filenames -- renaming those is churn nobody outside the repo sees.)"""
+    return redirect(url_for("outdoor_page"), code=301)
 
 
 @app.route("/indoor")
