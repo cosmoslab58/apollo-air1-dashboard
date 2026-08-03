@@ -657,6 +657,13 @@
    feet line up instead. */
 .rack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 480px) { .rack-grid { gap: 8px; } }
+/* Overview is two racks against a desktop viewport's worth of .view slack
+   (the sticky-footer arrangement on body/.wrap above). Top-aligned, the pair
+   hugged the header and the rest of the panel read as dead space; centring
+   the grid in the slack splits it above and below instead, where it reads as
+   margin around a deliberately sparse status screen. On viewports the cards
+   already fill (phones), the view is content height and this is a no-op. */
+#view-simple { display: flex; flex-direction: column; justify-content: center; }
 
 .rack {
   container-type: inline-size;
