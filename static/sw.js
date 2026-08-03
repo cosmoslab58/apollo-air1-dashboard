@@ -1,4 +1,4 @@
-const CACHE_NAME = "apollo-air1-shell-v8";
+const CACHE_NAME = "apollo-air1-shell-v9";
 const SHELL_FILES = [
   "/static/fonts/instrument-sans.woff2",
   "/static/fonts/martian-mono.woff2",
@@ -53,24 +53,32 @@ self.addEventListener("fetch", (event) => {
   // (offline), not a way to skip the network on a normal load.
   //
   // "Network-first" was not enough on its own: a plain fetch() still consults
-  // the HTTP cache, and Cloudflare rewrites this origin's `Cache-Control:
+  // the HTTP cache, and this zone was rewriting the origin's `Cache-Control:
   // no-cache` on /static/* into `max-age=14400`. So the network step was
   // legitimately answering from a 4-hour-old copy -- new HTML (never cached,
   // it is dynamic) against stale CSS/JS, which is a worse failure than a plain
   // stale page because the two halves disagree. Measured on a live deploy: the
-  // page ran a chart.js four hours older than the markup that called into it.
+  // page ran a chart.js eight days older than the markup that called into it.
+  // The zone now sends max-age=60 for code assets and keeps the long TTL for
+  // images, which fixes it at the source; this stays as the guarantee that
+  // does not depend on that config holding.
   //
-  // Only the code assets are forced past the HTTP cache. Fonts and icons are
-  // the bulk of the bytes and effectively immutable, so they keep normal
-  // caching; style.css/*.js are a few tens of KB and are exactly what changes
-  // on a deploy. Navigations need no help here -- the HTML is dynamic, so
-  // Cloudflare passes it through uncached -- and must be left alone regardless:
-  // re-constructing a request whose mode is "navigate" with a non-empty init
-  // throws, which would take out every page load rather than just staleness.
-  // The offline fallback below is unaffected either way: cache.put still keys
-  // on the original request.
+  // no-cache rather than no-store: both bypass a fresh cached copy, but
+  // no-store also throws away the bytes already on disk, re-downloading ~70KB
+  // of CSS+JS on every page load -- and every tab in this app is a full page
+  // load. no-cache forces the revalidation and lets a 304 reuse what is
+  // already there, so it costs a conditional request instead of a transfer.
+  //
+  // Only the code assets get this. Fonts and icons are the bulk of the bytes
+  // and effectively immutable, so they keep normal caching; style.css/*.js are
+  // exactly what a deploy changes. Navigations need no help -- the HTML is
+  // dynamic, so it is passed through uncached -- and must be left alone
+  // regardless: re-constructing a request whose mode is "navigate" with a
+  // non-empty init throws, which would take out every page load rather than
+  // just staleness. The offline fallback below is unaffected either way:
+  // cache.put still keys on the original request.
   const request = /\.(?:css|js)$/.test(url.pathname)
-    ? new Request(event.request, { cache: "no-store" })
+    ? new Request(event.request, { cache: "no-cache" })
     : event.request;
   event.respondWith(
     fetch(request)
