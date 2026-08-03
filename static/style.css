@@ -62,6 +62,13 @@
 
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  /* Column layout so short pages can push their footer down to the bottom of
+     the screen. Overview and Forecast are two cards and a rule: left in normal
+     flow they ended a third of the way down a desktop viewport, and the
+     footer's hairline floated mid-page with ~300px of empty panel underneath
+     it before the fixed bottom bar -- which reads as content failing to load,
+     not as a short page. .view absorbs the slack (below), so the blank space
+     lands above the rule instead of below it, where it reads as margin. */
   body {
     background: var(--panel);
     color: var(--ink);
@@ -70,6 +77,8 @@
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
@@ -87,7 +96,23 @@
 
   /* Bottom padding clears the fixed tab bar (plus phone home-indicator
      inset) so the footer is never trapped underneath it. */
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px calc(96px + env(safe-area-inset-bottom, 0px)); }
+  /* The two halves of the sticky-footer arrangement started on body above:
+     .wrap takes every pixel the header leaves, and .view (never more than one
+     per page -- every template is a single <section class="view"> plus the
+     footer partial) takes every pixel its own content doesn't. flex-shrink 0
+     on both so a long page still overflows and scrolls normally rather than
+     being squeezed into the viewport. page-footer keeps its own margin-top,
+     so nothing changes on pages whose content already fills the screen.
+     width: 100% is load-bearing: `margin: 0 auto` is a cross-axis auto margin
+     now that body is a flex column, and an auto cross margin cancels
+     align-items: stretch -- without it .wrap shrink-wraps to its content and
+     the whole page collapses to a ~270px column. max-width still caps it and
+     the auto margins still centre it. */
+  .wrap {
+    max-width: 1080px; margin: 0 auto; padding: 0 20px calc(96px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; flex: 1 0 auto; width: 100%;
+  }
+  .wrap > .view { flex: 1 0 auto; }
   /* Overview/Outdoor/Forecast also carry the provider row inside .bottom-nav
      (see below) -- their content needs extra bottom padding to clear it too.
      Indoor has no provider concept (it's the sensor's own reading, not an
@@ -118,12 +143,28 @@
     background: var(--panel); border-top: 1px solid var(--hairline);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* Both rows sit in the same 1080px column as everything else on the page,
+     rather than spanning the full window. Edge-to-edge, the selected provider
+     chip's wash started ~250px left of the card column it describes and the
+     last chip hugged the window edge, so the one permanently-visible surface
+     in the app was also the only one that ignored its grid. The bar's own
+     border-top stays full-bleed -- that's the fixed bar's edge against the
+     page, not a rule between columns of content -- but the divider between
+     the two rows is now inset to match the page footer's rule directly above
+     it. Gutters track .wrap's at every width, including the 420px step. */
+  .bottom-nav .provider-chips,
+  .bottom-nav .tab-bar {
+    max-width: 1080px; margin: 0 auto;
+  }
   .bottom-nav .provider-chips {
-    padding: 6px 8px; border-bottom: 1px solid var(--hairline);
+    padding: 6px 20px; border-bottom: 1px solid var(--hairline);
   }
   .tab-bar {
     display: flex; justify-content: center; gap: 4px;
-    padding: 6px 8px;
+    padding: 6px 20px;
+  }
+  @media (max-width: 420px) {
+    .bottom-nav .provider-chips, .tab-bar { padding-left: 14px; padding-right: 14px; }
   }
   .tab-bar a {
     flex: 0 1 160px; min-width: 0; text-align: center; text-decoration: none;
@@ -558,16 +599,24 @@
    on one screen without scrolling. Each rack sizes its own internals off
    its own column width (container queries below), not the viewport, since
    that column is half the old full-width rack once this stopped stacking. */
-/* align-items: start overrides grid's default row-stretch -- without it, a
-   long Inside sentence (real sensor prose, not just the placeholder) makes
-   that rack taller and stretches Outside to match, leaving a dangling empty
-   gap in the shorter card instead of each rack sizing to its own content. */
-.rack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+/* The racks stretch to a common height (grid's default) rather than each
+   sizing to its own content. Ragged bottoms are conspicuous here because the
+   pair is the whole page and the two cards are identical in every other
+   respect -- and the height difference isn't even about the sensor, it's
+   about how many pollutants the selected provider happens to report (AirNow
+   3, Google 6), so the same two cards jumped between flush and 40px-ragged on
+   a control that says nothing about height.
+   Stretching used to leave a dangling gap inside the shorter card, which is
+   why this was align-items: start; the rack is now a flex column whose rows
+   block absorbs the extra (below), so the slack lands above the foot and both
+   feet line up instead. */
+.rack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 480px) { .rack-grid { gap: 8px; } }
 
 .rack {
   container-type: inline-size;
   border-top: 3px solid var(--accent); overflow: hidden;
+  display: flex; flex-direction: column;
 }
 .rack--outside { border-top-color: var(--zone-outside); }
 
@@ -632,6 +681,44 @@
   .rack-aqi { font-size: 1.75rem; }
   .rack-stat { gap: 8px; }
   .rack-spark { flex: 1 1 100%; width: auto; height: 36px; }
+  /* Matching card heights only lines the pair up at the top and bottom; every
+     band in between still drifted. Outside carries an area name in its zone
+     line ("Outside  Southeast, MI") and Inside doesn't, so in a ~180px column
+     that name wraps to a second line in one card only -- and from there the
+     AQI number, the sparkline, the metric rows and the foot all sat ~28px
+     lower on the right than on the left. The two cards read as one instrument
+     panel, so a band that doesn't line up across them looks broken rather
+     than merely uneven.
+     So below the width where any of this is tight, the zone line is always
+     two lines in both cards: the area gets a line of its own (flex-basis
+     100% starts a fresh line, the same trick the sparkline uses right above),
+     min-height reserves that line in the Inside card too, and nowrap +
+     ellipsis stops a long area name from taking a third. Every band below it
+     then starts from the same offset in both cards, whatever the provider or
+     the length of "Southeast, MI" vs "Northwest Lower, MI" (Away) -- which is
+     what a plain min-height alone couldn't promise, since those two wrap at
+     different widths.
+     Subgrid would express this directly and without the reserved blank line,
+     but it is silently ignored here: .rack is a container-type: inline-size
+     element, and that containment disqualifies it from being a subgrid --
+     grid-template-rows computes back to none. The container queries this
+     whole layout is built on are worth more than the blank line.
+     row-gap: 0 because .rack-zone's shorthand gap applies between wrapped
+     flex lines as well as between the dot and the name -- left on, the area's
+     new line sat 8px lower than the blank one min-height reserves opposite
+     it, which is the whole misalignment back again at a smaller size. */
+  .rack-zone { min-height: 2.9em; align-content: start; row-gap: 0; }
+  .rack-area {
+    flex: 1 0 100%; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Same reservation at the other end of the card, for the same reason: the
+     feet are bottom-flush, so Outside's two-line "via AirNow - Updated 36m
+     ago" against Inside's one-line "Updated 1m ago" left the two hairlines
+     above them at different heights. Two lines' worth on the stamp itself
+     rather than on .rack-foot, so the figure stays in the stamp's own
+     0.75rem em box and doesn't have to add the foot's padding back in. */
+  .rack-updated { min-height: 2.9em; }
 }
 
 /* Two columns of metrics instead of one long list -- halves how tall each
@@ -639,8 +726,14 @@
    sit on one mobile screen now that they stay side-by-side. Reading order
    is row-major (PM2.5 next to PM10, not stacked above it) so related pairs
    still land next to each other rather than split top/bottom. */
+/* flex: 1 makes this the rack's slack-absorber (see .rack-grid above), and
+   align-content: start keeps the metric rows themselves at their natural
+   height while it does -- stretching the rows instead would give the two
+   racks visibly different row rhythms, which is a worse tell than the ragged
+   bottoms this replaced. */
 .rack-rows {
-  display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; align-content: start;
+  flex: 1 1 auto;
   padding: 2px 14px; border-top: 1px solid var(--hairline);
 }
 .rack-rows:empty { display: none; border-top: none; }
@@ -700,11 +793,26 @@
   .rack-row { font-size: 0.625rem; gap: 3px; }
   .rack-row:nth-child(odd) { padding-right: 6px; }
   .rack-row:nth-child(even) { padding-left: 6px; }
+  /* At this width whether the category text still fits beside the AQI number
+     comes down to the length of the dominant-pollutant line -- "Driven by
+     PM2.5" pushes Inside's text column under the number while "Driven by O3"
+     stays alongside it, so the two headline numbers end up on different
+     lines even though the row tracks they sit in are aligned. Stacking is
+     the arrangement the longer string forces anyway; applying it to both
+     puts the numbers back on the same line as each other. */
+  .rack-stat { flex-direction: column; align-items: flex-start; gap: 6px; }
+  /* flex-basis: 100% is the sparkline's "start a new line" trick in the
+     wrapped row above -- along a column axis it would read as height instead,
+     so the full-width row it already wanted has to be spelled out here. */
+  .rack-spark { flex: none; width: 100%; height: 32px; }
 }
 
+/* margin-top: auto is the backstop for the one case .rack-rows can't absorb
+   the slack in: :empty (below) takes it out of the layout entirely, and
+   without this the foot would ride up under the head in the shorter rack. */
 .rack-foot {
   padding: 10px 14px 14px; display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--hairline); margin-top: 2px;
+  gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--hairline); margin-top: auto;
 }
 /* Now lives on the Outdoor details page (technical.html), not the
    dashboard's rack-foot -- an empty state (no discussion/guidance for

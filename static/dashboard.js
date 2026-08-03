@@ -67,11 +67,22 @@
     const pad = (vMax - vMin) * 0.15 || 1;
     const lo = vMin - pad, hi = vMax + pad;
     const tMin = points[0].t, tMax = points[points.length - 1].t;
-    const xAt = (t) => ((t - tMin) / (tMax - tMin || 1)) * w;
-    const yAt = (v) => h - ((v - lo) / (hi - lo || 1)) * h;
+    // Drawing area inset by half the stroke width plus the round cap's reach,
+    // rather than the full 0..w/0..h box. A path drawn to the box edge has
+    // half its stroke outside the viewBox, and the rack clips it (overflow:
+    // hidden for the rounded corners) -- the flat top on a spike that reaches
+    // the series max, and the shaved first/last sample, both read as a chart
+    // cropped by mistake rather than one scaled to fit.
+    const inset = 1.5;
+    const x0 = inset, x1 = Math.max(inset, w - inset);
+    const y0 = inset, y1 = Math.max(inset, h - inset);
+    const xAt = (t) => x0 + ((t - tMin) / (tMax - tMin || 1)) * (x1 - x0);
+    const yAt = (v) => y1 - ((v - lo) / (hi - lo || 1)) * (y1 - y0);
     const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${xAt(p.t).toFixed(1)},${yAt(p.v).toFixed(1)}`).join(" ");
     const color = bandVar(band);
-    const areaD = `${d} L${w.toFixed(1)},${h} L0,${h} Z`;
+    // The fill closes on the baseline the line is drawn against, not the
+    // viewBox floor, so its bottom edge and the stroke's lowest point agree.
+    const areaD = `${d} L${x1.toFixed(1)},${y1.toFixed(1)} L${x0.toFixed(1)},${y1.toFixed(1)} Z`;
     el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-hidden="true">
       <path d="${areaD}" fill="${color}" opacity="0.14" stroke="none" />
       <path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
