@@ -123,8 +123,11 @@
      align-items: stretch -- without it .wrap shrink-wraps to its content and
      the whole page collapses to a ~270px column. max-width still caps it and
      the auto margins still centre it. */
+  /* 88px clears the 69px fixed tab bar with the same ~19px breathing room the
+     page footer's own spacing already provides -- the old 96px was sized for
+     a 56px bar and left a bigger dead band above the new one. */
   .wrap {
-    max-width: 1080px; margin: 0 auto; padding: 0 20px calc(96px + env(safe-area-inset-bottom, 0px));
+    max-width: 1080px; margin: 0 auto; padding: 0 20px calc(88px + env(safe-area-inset-bottom, 0px));
     display: flex; flex-direction: column; flex: 1 0 auto; width: 100%;
   }
   .wrap > .view { flex: 1 0 auto; }
@@ -610,6 +613,31 @@
   @media (max-width: 480px) {
     footer.page-footer { margin-top: 20px; }
     .view { padding-top: 20px; }
+  }
+  /* Short viewports -- landscape phones, small tablets / wall displays, and
+     the smallest portrait phones. What pushes a page past the fold at these
+     heights isn't content, it's the fixed chrome: header padding, the view's
+     top stand-off, the footer's, and the nav clearance. They all tighten
+     together, keyed on HEIGHT so this composes with the width tiers above
+     (declared after them, so it wins where both apply). Overview is the page
+     this is for -- a status screen that scrolls while showing blank space
+     reads as broken -- but every page benefits from the reclaimed room. */
+  @media (max-height: 720px) {
+    .faceplate-inner { padding-top: 10px; padding-bottom: 10px; }
+    .view { padding-top: 14px; }
+    footer.page-footer { margin-top: 14px; padding-top: 12px; }
+    .wrap { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+    .tab-bar a { padding: 5px 4px 7px; gap: 2px; }
+    .tab-icon { width: 18px; height: 18px; }
+  }
+  /* Landscape phones. The footer is only a clock on the main pages -- at a
+     height where every row counts it's the first thing to go, and the racks
+     give up a few px of padding. */
+  @media (max-height: 520px) {
+    footer.page-footer { display: none; }
+    .view { padding-top: 8px; }
+    .rack-head { padding: 10px 12px 8px; }
+    .rack-foot { padding: 8px 12px 10px; }
   }
 
   /* Sits above the fixed bottom nav. */
