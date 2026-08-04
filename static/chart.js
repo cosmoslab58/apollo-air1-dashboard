@@ -1,8 +1,7 @@
-// Shared hand-drawn SVG chart renderers, loaded after common.js on the pages
-// that chart (technical/indoor). Previously renderRowChart was byte-identical
-// across both page scripts and renderChart/renderOverlayRowChart were one more
-// copy each; this is their single home. Depends on bandVar/fmt/escapeHtml from
-// common.js.
+// Shared hand-drawn SVG chart renderers (renderRowChart /
+// renderOverlayRowChart), loaded after common.js on the pages that chart
+// (technical/indoor). Previously each was copy-pasted per page script; this
+// is their single home. Depends on bandVar/fmt/escapeHtml from common.js.
 //
 // Series are plotted by real timestamp (not array index) so sources sampled at
 // different rates overlay correctly. The viewBox width is the element's own
@@ -12,7 +11,6 @@
 // row heights). Measuring the real width and using it 1:1 keeps 1 unit = 1 CSS
 // pixel, so text/stroke/row-height stay true size on every screen.
 
-const CHART_H = 170, CHART_PAD = { l: 38, r: 4, t: 10, b: 20 };
 const ROW_H = 58, ROW_PAD_TOP = 17, ROW_PAD_BOTTOM = 8;
 // r leaves room for each lane's own scale (see rowScaleLabels). The single-
 // series renderChart below has carried a labelled y-axis all along; the lane
@@ -26,31 +24,6 @@ const ROW_SCALE_GAP = 6;
 
 function measureWidth(el) {
   return Math.max(el.clientWidth, 240);
-}
-
-function formatTick(v) {
-  const abs = Math.abs(v);
-  if (abs >= 100) return String(Math.round(v));
-  if (abs >= 10) return String(Math.round(v * 10) / 10);
-  return String(Math.round(v * 100) / 100);
-}
-
-function pathFor(points, tMin, tMax, vMin, vMax, W) {
-  const xw = W - CHART_PAD.l - CHART_PAD.r;
-  const yh = CHART_H - CHART_PAD.t - CHART_PAD.b;
-  return points.map((p, i) => {
-    const x = CHART_PAD.l + ((p.t - tMin) / (tMax - tMin || 1)) * xw;
-    const y = CHART_PAD.t + yh - ((p.v - vMin) / (vMax - vMin || 1)) * yh;
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-}
-
-function pointAt(p, tMin, tMax, vMin, vMax, W) {
-  const xw = W - CHART_PAD.l - CHART_PAD.r;
-  const yh = CHART_H - CHART_PAD.t - CHART_PAD.b;
-  const x = CHART_PAD.l + ((p.t - tMin) / (tMax - tMin || 1)) * xw;
-  const y = CHART_PAD.t + yh - ((p.v - vMin) / (vMax - vMin || 1)) * yh;
-  return [x, y];
 }
 
 // Averages points into fixed-duration buckets sized to at least
@@ -111,47 +84,88 @@ function rowScaleLabels(yAt, vMin, vMax, decimals, W) {
   return vMax === vMin ? label(vMax) : label(vMax) + label(vMin);
 }
 
-// series: [{ color, points: [{t, v}], area }] -- one shared y-scale, grid +
-// y-axis labels. Used for the single-series indoor charts (temp/humidity).
-function renderChart(el, series, opts) {
-  const nonEmpty = series.filter((s) => s.points.length > 0);
-  if (nonEmpty.length === 0) {
-    el.innerHTML = '<div class="empty-state">No data in this range yet.</div>';
-    return;
-  }
-  const W = measureWidth(el);
-  const allTimes = nonEmpty.flatMap((s) => s.points.map((p) => p.t));
-  const allVals = nonEmpty.flatMap((s) => s.points.map((p) => p.v));
-  const tMin = Math.min(...allTimes), tMax = Math.max(...allTimes);
-  const vMin = Math.min(...allVals), vMax = Math.max(...allVals);
-  const pad = (vMax - vMin) * 0.12 || 1;
-  const lo = vMin - pad;
-  const hi = vMax + pad;
+/* ---------- tap / drag to inspect ----------
+ * The lane charts show each row's CURRENT value in its label, but there was
+ * no way to ask "what was the CO2 at 3am?" -- on a phone especially, where
+ * there's no hover. Press or drag anywhere on a chart to get a guide line
+ * plus a small readout of every series in the lane under the finger, at the
+ * nearest real sample (raw points, not the downsampled drawing). Values stay
+ * up after lifting so they can actually be read; tapping outside the chart
+ * dismisses. touch-action: pan-y (style.css) keeps vertical page scrolling
+ * working -- only horizontal drags are captured. */
+function scrubTimeLabel(t) {
+  return new Date(t).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+}
 
-  let svg = `<svg viewBox="0 0 ${W} ${CHART_H}" preserveAspectRatio="none" role="img" aria-label="${opts.label || "chart"}">`;
-  for (let gy = 0; gy <= 3; gy++) {
-    const y = CHART_PAD.t + (gy / 3) * (CHART_H - CHART_PAD.t - CHART_PAD.b);
-    svg += `<line class="chart-grid-line" x1="${CHART_PAD.l}" y1="${y.toFixed(1)}" x2="${W - CHART_PAD.r}" y2="${y.toFixed(1)}" />`;
-    const tickVal = hi - (gy / 3) * (hi - lo);
-    svg += `<text class="chart-axis-label chart-y-label" x="${(CHART_PAD.l - 6).toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="end">${formatTick(tickVal)}</text>`;
+// Points are time-sorted (Influx order) -- bisect, then pick the closer
+// neighbour. Raw series can run to thousands of points at 7d.
+function nearestPoint(points, t) {
+  let lo = 0, hi = points.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid].t < t) lo = mid; else hi = mid;
   }
-  nonEmpty.forEach((s) => {
-    const plotPoints = downsampleForDisplay(s.points, tMin, tMax, W - CHART_PAD.l - CHART_PAD.r);
-    const d = pathFor(plotPoints, tMin, tMax, lo, hi, W);
-    if (s.area) {
-      const yh = CHART_H - CHART_PAD.t - CHART_PAD.b;
-      const areaD = `${d} L${(W - CHART_PAD.r).toFixed(1)},${(CHART_PAD.t + yh).toFixed(1)} L${CHART_PAD.l},${(CHART_PAD.t + yh).toFixed(1)} Z`;
-      svg += `<path d="${areaD}" fill="${s.color}" opacity="0.12" stroke="none" />`;
-    }
-    svg += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`;
-    const last = s.points[s.points.length - 1];
-    const [ex, ey] = pointAt(last, tMin, tMax, lo, hi, W);
-    svg += `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${s.color}" stroke="var(--panel-raised)" stroke-width="1.5" />`;
+  return Math.abs(points[lo].t - t) <= Math.abs(points[hi].t - t) ? points[lo] : points[hi];
+}
+
+/* model: { tMin, tMax, padL, padR, lanes: [{ yTop, yBottom, title,
+ *   series: [{ label, unit, decimals, points, bandFor }] }] }
+ * Lane y-coordinates are viewBox units; the SVG renders 1 viewBox unit = 1
+ * CSS px (see the file header), so pointer offsets compare directly. The
+ * guide/readout are plain positioned divs so they survive being cheap; a
+ * re-render (el.innerHTML = svg) wipes them, which doubles as the dismissal
+ * on data refresh -- show() re-appends. */
+function attachScrub(el, model) {
+  el._scrubModel = model;
+  if (el._scrubInit) return;
+  el._scrubInit = true;
+
+  const line = document.createElement("div");
+  line.className = "chart-scrub-line";
+  const tip = document.createElement("div");
+  tip.className = "chart-scrub-tip";
+  const hide = () => { line.remove(); tip.remove(); };
+
+  function update(clientX, clientY) {
+    const m = el._scrubModel;
+    if (!m) { hide(); return; }
+    const rect = el.getBoundingClientRect();
+    const plotW = rect.width - m.padL - m.padR;
+    if (plotW <= 0) return;
+    const frac = Math.min(1, Math.max(0, (clientX - rect.left - m.padL) / plotW));
+    const t = m.tMin + frac * (m.tMax - m.tMin);
+    const y = clientY - rect.top;
+    const lane = m.lanes.find((l) => y >= l.yTop && y < l.yBottom) || m.lanes[0];
+
+    const rows = lane.series.filter((s) => s.points.length > 0).map((s) => {
+      const p = nearestPoint(s.points, t);
+      const color = bandVar(s.bandFor ? s.bandFor(p.v) : null);
+      return `<div class="cs-row">${s.label ? `<span class="cs-label">${escapeHtml(s.label)}</span>` : ""}` +
+        `<span class="cs-value" style="color: ${color}">${fmt(p.v, s.decimals)}${s.unit || ""}</span></div>`;
+    }).join("");
+    tip.innerHTML = `<div class="cs-time">${escapeHtml(lane.title)} · ${scrubTimeLabel(t)}</div>${rows}`;
+
+    if (!line.isConnected) el.append(line, tip);
+    const lineX = m.padL + frac * plotW;
+    line.style.left = `${lineX.toFixed(1)}px`;
+    // Center the readout on the guide, clamped inside the card.
+    const tipW = tip.offsetWidth;
+    tip.style.left = `${Math.min(Math.max(lineX - tipW / 2, 2), rect.width - tipW - 2).toFixed(1)}px`;
+  }
+
+  let active = false;
+  el.addEventListener("pointerdown", (e) => { active = true; update(e.clientX, e.clientY); });
+  el.addEventListener("pointermove", (e) => {
+    // Mouse scrubs on plain hover; touch/pen only while pressed.
+    if (active || e.pointerType === "mouse") update(e.clientX, e.clientY);
   });
-  svg += `<text class="chart-axis-label" x="${CHART_PAD.l}" y="${CHART_H - 4}">${opts.leftLabel || ""}</text>`;
-  svg += `<text class="chart-axis-label" x="${W - CHART_PAD.r}" y="${CHART_H - 4}" text-anchor="end">now</text>`;
-  svg += "</svg>";
-  el.innerHTML = svg;
+  ["pointerup", "pointercancel"].forEach((ev) => el.addEventListener(ev, () => { active = false; }));
+  el.addEventListener("pointerleave", (e) => {
+    if (e.pointerType === "mouse") { active = false; hide(); }
+  });
+  // Touch: the readout stays up after lifting (so it can be read); a tap
+  // anywhere outside this chart dismisses it.
+  document.addEventListener("pointerdown", (e) => { if (!el.contains(e.target)) hide(); });
 }
 
 // One SVG, N horizontal lanes -- all rows share the same time axis (drawn once,
@@ -163,6 +177,7 @@ function renderRowChart(el, rows, opts) {
   const nonEmpty = rows.filter((r) => r.points.length > 0);
   if (nonEmpty.length === 0) {
     el.innerHTML = '<div class="empty-state">No data in this range yet.</div>';
+    el._scrubModel = null;
     return;
   }
   const W = measureWidth(el);
@@ -207,6 +222,13 @@ function renderRowChart(el, rows, opts) {
   svg += `<text class="chart-axis-label" x="${W - ROW_PAD.r}" y="${bottomY}" text-anchor="end">now</text>`;
   svg += "</svg>";
   el.innerHTML = svg;
+  attachScrub(el, {
+    tMin, tMax, padL: ROW_PAD.l, padR: ROW_PAD.r,
+    lanes: nonEmpty.map((r, i) => ({
+      yTop: i * ROW_H, yBottom: (i + 1) * ROW_H, title: r.label,
+      series: [{ label: "", unit: r.unit, decimals: r.decimals, points: r.points, bandFor: r.bandFor }],
+    })),
+  });
 }
 
 // Same idea as renderRowChart, but each row overlays two series (Inside and
@@ -222,6 +244,7 @@ function renderOverlayRowChart(el, rows, opts) {
   const nonEmpty = rows.filter((r) => r.inside.points.length > 0 || r.outside.points.length > 0);
   if (nonEmpty.length === 0) {
     el.innerHTML = '<div class="empty-state">No data in this range yet.</div>';
+    el._scrubModel = null;
     return;
   }
   const W = measureWidth(el);
@@ -297,4 +320,14 @@ function renderOverlayRowChart(el, rows, opts) {
   svg += `<text class="chart-axis-label" x="${W - ROW_PAD.r}" y="${bottomY}" text-anchor="end">now</text>`;
   svg += "</svg>";
   el.innerHTML = svg;
+  attachScrub(el, {
+    tMin, tMax, padL: ROW_PAD.l, padR: ROW_PAD.r,
+    lanes: nonEmpty.map((r, i) => ({
+      yTop: i * ROW_H, yBottom: (i + 1) * ROW_H, title: r.label,
+      series: [
+        { label: "In", unit: r.unit, decimals: r.decimals, points: r.inside.points, bandFor: r.inside.bandFor },
+        { label: "Out", unit: r.unit, decimals: r.decimals, points: r.outside.points, bandFor: r.outside.bandFor },
+      ],
+    })),
+  });
 }

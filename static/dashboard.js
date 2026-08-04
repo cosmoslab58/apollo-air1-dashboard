@@ -11,11 +11,9 @@
   // Overview renders no temperature at all, so index.html hides that settings
   // row (show_units_row) and this page has nothing to convert or re-render.
 
-  // Band ranking and the inside worst-of both come from common.js now
+  // Band ranking and the inside worst-of both come from common.js
   // (worseBandName / worstBandOf), so this page and the LED rank severity the
-  // same way. worseBand stays as a thin alias because the Outside cards use it
-  // too and their bands come from a different source (provider AQI).
-  const worseBand = worseBandName;
+  // same way.
 
   // Six labels for the firmware's six bands, describing the READING rather than
   // passing a health verdict, because this headline is a worst-of that any of
@@ -184,6 +182,15 @@
     }).filter(Boolean).join("");
   }
 
+  // The racks ship with data-loading (index.html), which pulses the headline
+  // number/category until the first answer -- success or failure -- lands.
+  // Cleared per rack, not globally: a slow provider shouldn't keep the
+  // sensor's own card shimmering.
+  function rackLoaded(which) {
+    const rack = document.querySelector(`.rack--${which}`);
+    if (rack) rack.removeAttribute("data-loading");
+  }
+
   /* ---------- outside (AirNow / Google / PurpleAir / OpenWeatherMap) ---------- */
   // Kept so the AQI/Units readout toggle can re-render the rows without refetching.
   let lastOutsidePollutants = null;
@@ -224,6 +231,7 @@
       document.getElementById("out-updated").textContent = d.time
         ? `via ${providerLabel()} · Updated ${timeAgo(d.time)}`
         : `via ${providerLabel()} · live`;
+      rackLoaded("outside");
     } catch (e) {
       document.getElementById("out-aqi").textContent = "—";
       document.getElementById("out-category").textContent = apiErrorMsg || ("Couldn't reach " + providerLabel() + ".");
@@ -231,8 +239,9 @@
       lastOutsidePollutants = null;
       document.getElementById("outside-rows").innerHTML = "";
       // Still "via X" -- naming the source that failed is what makes the
-      // header pill the obvious way out.
+      // source pill the obvious way out.
       document.getElementById("out-updated").textContent = `via ${providerLabel()}`;
+      rackLoaded("outside");
     }
   }
 
@@ -299,6 +308,7 @@
       document.getElementById("inside-rows").innerHTML = insideRowsHtml(d);
       // When the AIR-1 last reported a reading into the DB.
       document.getElementById("in-updated").textContent = d.time ? "Updated " + timeAgo(d.time) : "";
+      rackLoaded("inside");
     } catch (e) {
       setIndoorUnavailable("Couldn't reach the sensor feed.");
     }
@@ -313,6 +323,7 @@
     lastInsideLatest = null;
     document.getElementById("inside-rows").innerHTML = insideRowsHtml({});
     document.getElementById("in-updated").textContent = "";
+    rackLoaded("inside"); // a definitive "unavailable" is an answer, not loading
   }
 
   /* ---------- init ---------- */

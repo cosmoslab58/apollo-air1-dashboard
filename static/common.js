@@ -246,12 +246,20 @@ document.addEventListener("click", (e) => {
     settingsBackdrop.hidden = false;
     settingsToggle.setAttribute("aria-expanded", "true");
     window.addEventListener("resize", positionSettingsPanel);
+    // Standard dialog focus contract: focus moves into the dialog on open
+    // and back to the trigger on close, so keyboard/switch users aren't left
+    // tabbing the page underneath the popover.
+    settingsPanel.setAttribute("tabindex", "-1");
+    settingsPanel.focus({ preventScroll: true });
   }
   function closeSettings() {
     settingsPanel.hidden = true;
     settingsBackdrop.hidden = true;
     settingsToggle.setAttribute("aria-expanded", "false");
     window.removeEventListener("resize", positionSettingsPanel);
+    if (settingsPanel.contains(document.activeElement) || document.activeElement === document.body) {
+      settingsToggle.focus({ preventScroll: true });
+    }
   }
   settingsToggle.addEventListener("click", () => {
     if (settingsPanel.hidden) openSettings(); else closeSettings();
@@ -434,6 +442,9 @@ function currentProvider() {
     // page -- the fixed backdrop doesn't block wheel/touch scrolling, so the
     // anchored menu has to follow its trigger or it visibly detaches.
     window.addEventListener("scroll", positionSheet, { passive: true });
+    // Same dialog focus contract as the settings panel.
+    sheet.setAttribute("tabindex", "-1");
+    sheet.focus({ preventScroll: true });
     refreshSummary().then(() => { if (!sheet.hidden) render(); });
   }
   function closeSheet() {
@@ -442,6 +453,9 @@ function currentProvider() {
     pill.setAttribute("aria-expanded", "false");
     window.removeEventListener("resize", positionSheet);
     window.removeEventListener("scroll", positionSheet);
+    if (sheet.contains(document.activeElement) || document.activeElement === document.body) {
+      pill.focus({ preventScroll: true });
+    }
   }
 
   document.addEventListener("click", (e) => {
@@ -667,6 +681,40 @@ function latestPollMs(latest) {
   const threshold = table && typeof table.elevated_band === "number" ? table.elevated_band : Infinity;
   return typeof band === "number" && band >= threshold ? fast : slow;
 }
+
+/* ---------- stale-client reload ----------
+ * The page carries the deploy marker it was rendered with (head.html);
+ * /api/tick carries the server's current one. They diverge in exactly two
+ * cases: a deploy happened while this page sat open (installed PWA, wall
+ * display), or the service worker's offline fallback served a cached shell
+ * during a connectivity blip (VPN'd phone) and the network is back. Either
+ * way the fix is one reload. Checked on load, whenever the app returns to
+ * the foreground (the moment a stale PWA would otherwise show old UI), and
+ * every 15 minutes while visible -- a wall display never backgrounds, so a
+ * foreground-only check would never fire there at all.
+ * The once-per-version guard means a flapping server (or a cached page that
+ * somehow keeps re-serving) degrades to nothing, never a reload loop. */
+(function initVersionWatch() {
+  const meta = document.querySelector('meta[name="app-version"]');
+  if (!meta || !meta.content) return;
+  const pageVersion = meta.content;
+  async function check() {
+    try {
+      const res = await fetch("/api/tick");
+      if (!res.ok) return;
+      const d = await res.json();
+      if (!d.app_version || d.app_version === pageVersion) return;
+      const KEY = "apollo-air1-reloaded-for";
+      if (localStorage.getItem(KEY) === d.app_version) return;
+      localStorage.setItem(KEY, d.app_version);
+      location.reload();
+    } catch (e) { /* offline -- the next check will retry */ }
+  }
+  // pollInterval (below; hoisted) = periodic while visible + an immediate
+  // run every time the tab becomes visible again.
+  pollInterval(check, 15 * 60000);
+  check();
+})();
 
 /* ---------- service worker (installability is a nice-to-have) ---------- */
 if ("serviceWorker" in navigator) {

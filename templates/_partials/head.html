@@ -2,6 +2,10 @@
   <meta charset="utf-8">
   <title>{{ page_title }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  {# Deploy marker for the stale-client reload check (common.js) -- compared
+     against /api/tick's app_version so an installed PWA or wall display
+     picks up a new deploy without a manual refresh. #}
+  <meta name="app-version" content="{{ app_version }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">

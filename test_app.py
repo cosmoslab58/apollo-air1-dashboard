@@ -29,6 +29,13 @@ def test_pages_render(client, path):
     assert b'class="tab-bar"' in res.data
 
 
+def test_pages_carry_the_tick_version_marker(client):
+    # The stale-client reload check (common.js) compares the page's stamped
+    # version against /api/tick's -- both must carry the same value.
+    page = client.get("/").data.decode()
+    assert f'<meta name="app-version" content="{app_module.APP_VERSION}">' in page
+
+
 def test_old_technical_url_redirects(client):
     res = client.get("/technical")
     assert res.status_code == 301
@@ -59,7 +66,7 @@ def test_tick_reports_seen_and_band(client, monkeypatch):
                         lambda suffix: '{"air_band": 2, "co2_ppm": 900}')
     monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: 1234.5)
     d = client.get("/api/tick").get_json()
-    assert d == {"seen_at": 1234.5, "air_band": 2}
+    assert d == {"seen_at": 1234.5, "air_band": 2, "app_version": app_module.APP_VERSION}
 
 
 def test_tick_nulls_when_nothing_received(client, monkeypatch):
@@ -69,7 +76,7 @@ def test_tick_nulls_when_nothing_received(client, monkeypatch):
     monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: None)
     res = client.get("/api/tick")
     assert res.status_code == 200
-    assert res.get_json() == {"seen_at": None, "air_band": None}
+    assert res.get_json() == {"seen_at": None, "air_band": None, "app_version": app_module.APP_VERSION}
 
 
 def test_tick_survives_malformed_payload(client, monkeypatch):
@@ -79,7 +86,7 @@ def test_tick_survives_malformed_payload(client, monkeypatch):
     monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: 99.0)
     res = client.get("/api/tick")
     assert res.status_code == 200
-    assert res.get_json() == {"seen_at": 99.0, "air_band": None}
+    assert res.get_json() == {"seen_at": 99.0, "air_band": None, "app_version": app_module.APP_VERSION}
 
 
 def test_bands_404_when_device_never_published(client, monkeypatch):

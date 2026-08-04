@@ -2,6 +2,7 @@ import concurrent.futures
 import json
 import logging
 import os
+import time
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, url_for
@@ -26,6 +27,14 @@ app = Flask(__name__)
 PORT = int(os.environ.get("PORT", 5858))
 HOST = os.environ.get("HOST", "0.0.0.0")
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "t")
+
+# Deploy marker, not semantic: process start time. Every deploy restarts the
+# container, so a client whose stamped version stops matching /api/tick's is
+# running a stale shell -- the installed-PWA / wall-display case, where the
+# page can sit open (or get served from the service worker's offline
+# fallback) for days and never pick up a deploy on its own. common.js
+# compares the two and reloads once when they diverge.
+APP_VERSION = str(int(time.time()))
 
 NUMBER_BOUNDS = {
     mqtt_bridge.SLEEP_DURATION: (0, 800),
@@ -59,9 +68,14 @@ if not DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
 
 @app.context_processor
 def inject_links():
-    # Optional external link to the Grafana provider-comparison dashboard,
-    # shown in the page footer on every page. Unset -> link is omitted.
-    return {"grafana_url": os.environ.get("GRAFANA_DASHBOARD_URL", "")}
+    # grafana_url: optional external link to the Grafana provider-comparison
+    # dashboard, shown in the Device page footer. Unset -> link is omitted.
+    # app_version: stamped into every page (see head.html) for the stale-
+    # client reload check against /api/tick.
+    return {
+        "grafana_url": os.environ.get("GRAFANA_DASHBOARD_URL", ""),
+        "app_version": APP_VERSION,
+    }
 
 
 @app.route("/healthz")
@@ -147,7 +161,14 @@ def api_tick():
             air_band = json.loads(raw).get("air_band")
         except ValueError:
             logging.warning("api_tick: retained state payload is not JSON")
-    return jsonify({"seen_at": mqtt_bridge.get_seen("state"), "air_band": air_band})
+    return jsonify({
+        "seen_at": mqtt_bridge.get_seen("state"),
+        "air_band": air_band,
+        # For the stale-client reload check -- see APP_VERSION above. Rides on
+        # this endpoint because it's the one thing every client already polls
+        # (or fetches on returning to the foreground) and it stays cheap.
+        "app_version": APP_VERSION,
+    })
 
 
 @app.route("/api/bands")

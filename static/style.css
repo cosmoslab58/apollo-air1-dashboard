@@ -315,7 +315,12 @@
   @media (max-width: 560px) {
     .settings-panel {
       left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); top: auto;
-      width: auto; max-height: calc(100vh - 24px); overflow-y: auto;
+      width: auto;
+      /* dvh tracks the real visible viewport on phones (URL bar shown or
+         not); the vh line stays as the fallback for engines without it. */
+      max-height: calc(100vh - 24px);
+      max-height: calc(100dvh - 24px);
+      overflow-y: auto;
       animation: settingsheetup 180ms ease both;
     }
     /* Same reasoning as settingsin above: the sheet slides, its contents fade. */
@@ -369,6 +374,14 @@
   .section-title { font-size: 1rem; font-weight: 600; color: var(--ink); margin: 0; }
   .section-note { font-size: 0.875rem; color: var(--ink-dim); }
   .readout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  /* "What the LED colors mean →" under the Inside readouts -- fine print,
+     same voice as .section-note. */
+  .led-key-link { margin: 10px 2px 0; font-size: 0.75rem; }
+  .led-key-link a { color: var(--ink-dim); text-underline-offset: 3px; }
+  .led-key-link a:hover { color: var(--ink); }
+  /* Deep-link target on the Device page -- clear the sticky header when the
+     Inside page's link jumps here. */
+  #led-key { scroll-margin-top: 90px; }
   .readout {
     border-top: 3px solid var(--edge-color, var(--hairline));
     padding: 14px 14px 12px;
@@ -573,10 +586,36 @@
     padding: 16px 18px 10px; margin-bottom: 12px;
   }
   .chart-card h3 { margin: 0 0 10px; font-size: 0.875rem; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-  .chart-svg-wrap { width: 100%; overflow-x: auto; }
+  /* position: relative hosts the scrub guide/readout (chart.js's
+     attachScrub); pan-y hands vertical swipes to the page and keeps
+     horizontal drags for scrubbing; user-select stops a long-press from
+     starting a text selection instead of a scrub. */
+  .chart-svg-wrap {
+    width: 100%; overflow-x: auto;
+    position: relative; touch-action: pan-y;
+    -webkit-user-select: none; user-select: none;
+  }
   .chart-svg-wrap svg { display: block; width: 100%; height: auto; }
   .chart-grid-line { stroke: var(--hairline); stroke-width: 1; }
   .chart-axis-label { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-dim); }
+
+  /* tap/drag-to-inspect (attachScrub in chart.js) */
+  .chart-scrub-line {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: color-mix(in srgb, var(--ink) 40%, transparent);
+    pointer-events: none;
+  }
+  .chart-scrub-tip {
+    position: absolute; top: 2px; z-index: 2; pointer-events: none;
+    background: var(--panel-raised); border: 1px solid var(--hairline);
+    border-radius: 8px; box-shadow: var(--shadow-raised);
+    padding: 6px 9px; white-space: nowrap;
+    font-size: 0.6875rem; line-height: 1.5;
+  }
+  .chart-scrub-tip .cs-time { color: var(--ink-dim); font-weight: 600; }
+  .chart-scrub-tip .cs-row { display: flex; justify-content: space-between; gap: 10px; }
+  .chart-scrub-tip .cs-label { color: var(--ink-dim); }
+  .chart-scrub-tip .cs-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
 
   /* tables */
   .table-wrap { overflow-x: auto; }
@@ -750,6 +789,16 @@
   .rack--tappable:hover { box-shadow: var(--shadow-raised); }
   .rack--tappable:hover .rack-chevron { color: var(--ink); }
 }
+
+/* First-load shimmer: the racks arrive with data-loading (index.html) and
+   dashboard.js clears it per rack once anything definitive -- a reading OR
+   an error message -- lands, so the pulse only ever means "still asking".
+   Headline elements only; a whole-card shimmer reads as broken. */
+.rack[data-loading] .rack-aqi,
+.rack[data-loading] .rack-category {
+  animation: rackpulse 1.2s ease-in-out infinite;
+}
+@keyframes rackpulse { 50% { opacity: 0.35; } }
 
 .rack-head { padding: 14px 14px 12px; }
 @container (max-width: 220px) { .rack-head { padding: 10px 10px 8px; } }
