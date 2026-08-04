@@ -18,8 +18,15 @@
       </button>
     </div>
   </div>
-</div>
+</header>
 
+{# OUTSIDE the sticky header, deliberately: .faceplate is position: sticky
+   with z-index 20, so it creates a stacking context -- anything inside it,
+   whatever its own z-index, paints below the fixed bottom nav (also z 20
+   but later in the DOM). With the panel as a header child, the bottom
+   sheet's last row (Device settings) sat exactly in the band the nav
+   covers, invisible and untappable on phones. As direct body-level
+   elements the panel's z 30 wins over the nav, same as the source sheet. #}
 <div class="settings-backdrop" id="settings-backdrop" hidden></div>
 <div class="settings-panel" id="settings-panel" role="dialog" aria-label="Settings" hidden>
   <div class="settings-panel-head">Settings</div>
@@ -62,4 +69,4 @@
   <div class="settings-row">
     <a class="settings-device-link" href="/device">Device settings <span aria-hidden="true">›</span></a>
   </div>
-</header>
+</div>
