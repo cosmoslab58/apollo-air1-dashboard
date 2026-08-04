@@ -5,6 +5,10 @@
 <body>
 
 {% set show_away_mode = true %}
+{% set show_source_pill = true %}
+{# The one page where a provider with no forecast (PurpleAir) can't be
+   picked at all -- everywhere else it's a valid live-conditions source. #}
+{% set restrict_forecast = true %}
 {% set show_units_row = false %}
 {% include "_partials/chrome_header.html" %}
 
@@ -18,11 +22,9 @@
       <div class="forecast-card-head">
         <div class="forecast-area eyebrow" id="forecast-area">—</div>
         <div class="forecast-meta">
-          {# Doubles as the data-source picker. data-restrict-forecast marks
-             this as the one picker where a provider with no forecast
-             (PurpleAir) can't be chosen -- everywhere else it's a perfectly
-             valid live-conditions source. #}
-          <button type="button" class="forecast-source provider-status source-btn" id="forecast-source" aria-haspopup="dialog" aria-expanded="false" data-restrict-forecast="true">—</button>
+          {# Informational only -- the source is switched from the header's
+             source pill (chrome_header.html). #}
+          <span class="forecast-source provider-status" id="forecast-source">—</span>
           <button type="button" class="refresh-btn" id="forecast-refresh">Refresh</button>
         </div>
       </div>

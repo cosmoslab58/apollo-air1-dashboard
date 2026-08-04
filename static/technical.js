@@ -374,8 +374,8 @@
       document.getElementById("outside-dominant-tech").textContent = d.dominant_pollutant ? `Main pollutant: ${d.dominant_pollutant}` : "";
       document.getElementById("outside-area-tech").textContent = d.reporting_area || "—";
       // Which provider this reading is from and when it was last refreshed --
-      // both in one place, and the stamp itself is the source picker
-      // (common.js), so the name doubles as the control that changes it.
+      // both in one place; the source is switched from the header's pill
+      // (common.js).
       document.getElementById("outside-updated-tech").textContent = `via ${providerLabel()} · Updated ${whenText}`;
       document.getElementById("outside-tech-card").style.setProperty("--edge-color", bandVar(band));
       document.getElementById("outside-pollutants").innerHTML = pollutantFactorsHtml(d.pollutants);
@@ -384,8 +384,8 @@
       document.getElementById("outside-aqi-tech").textContent = "—";
       document.getElementById("outside-category-tech").textContent = apiErrorMsg || "Unavailable";
       document.getElementById("outside-dominant-tech").textContent = "";
-      // Still "via X" -- the stamp is also the source picker, and an
-      // unreachable provider is exactly when you need it to switch away.
+      // Still "via X" -- naming the source that failed is what makes the
+      // header pill the obvious way out.
       document.getElementById("outside-updated-tech").textContent = `via ${providerLabel()}`;
       document.getElementById("outside-pollutants").innerHTML = "";
       document.getElementById("outside-discussion").innerHTML = "";
@@ -451,8 +451,7 @@
     loadOutsideHistorySection(currentRangeOutside);
   });
 
-  // The shared source picker (common.js) -- this page's trigger is the
-  // "via X" stamp in the Current reading section head.
+  // The shared source picker (common.js) -- the header's source pill.
   document.addEventListener("providerchange", () => {
     loadOutside();
     loadOutsideHistorySection(currentRangeOutside);

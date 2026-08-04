@@ -145,10 +145,10 @@
   }
 
   // The provider is chosen from the shared source picker (common.js,
-  // currentProvider()) -- this page's trigger is the "via X" stamp in the
-  // card head. It reacts via "providerchange" below and shows which agency
-  // actually served the data (forecast-source, using the response's own
-  // "provider" field, which is the real source of truth -- see loadForecast).
+  // currentProvider()) -- the trigger is the header's source pill. This page
+  // reacts via "providerchange" below and shows which agency actually served
+  // the data (forecast-source, using the response's own "provider" field,
+  // which is the real source of truth -- see loadForecast).
   const PROVIDER_LABELS = { google: "Google Air Quality", openweathermap: "OpenWeatherMap", airnow: "AirNow", purpleair: "PurpleAir" };
   function providerLabel(provider) {
     return PROVIDER_LABELS[provider || effectiveProvider()] || "AirNow";

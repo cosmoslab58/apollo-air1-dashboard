@@ -5,6 +5,7 @@
 <body>
 
 {% set show_away_mode = true %}
+{% set show_source_pill = true %}
 {% set show_units_row = true %}
 {% include "_partials/chrome_header.html" %}
 
@@ -18,8 +19,9 @@
     <div class="section">
       <div class="section-head">
         <h2 class="section-title">Current reading</h2>
-        {# Doubles as the data-source picker -- see common.js's source sheet. #}
-        <button type="button" class="provider-status source-btn" id="outside-updated-tech" aria-haspopup="dialog" aria-expanded="false">—</button>
+        {# Informational only -- the source is switched from the header's
+           source pill (chrome_header.html). #}
+        <span class="provider-status" id="outside-updated-tech">—</span>
       </div>
       <div class="outside-tech-card" id="outside-tech-card" style="--edge-color: var(--hairline);">
         <div class="outside-tech-main">

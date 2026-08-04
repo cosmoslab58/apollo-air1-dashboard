@@ -35,6 +35,15 @@ def test_old_technical_url_redirects(client):
     assert res.headers["Location"].endswith("/outdoor")
 
 
+def test_source_pill_only_on_pages_with_outside_data(client):
+    # The header's provider pill belongs to pages that show outside readings;
+    # Inside and Device have no outside data and must not grow the control.
+    for path in ("/", "/outdoor", "/forecast"):
+        assert b"source-pill" in client.get(path).data, path
+    for path in ("/indoor", "/device"):
+        assert b"source-pill" not in client.get(path).data, path
+
+
 def test_device_controls_live_on_device_page_not_indoor(client):
     # The factory-reset button (and the rest of the setup controls) moved to
     # /device -- the Inside page is readings only.

@@ -312,17 +312,20 @@ function renderAwayLocationRow() {
 }
 
 /* ---------- data-source picker: AirNow / Google / PurpleAir / OpenWeatherMap
- * (self-initializing wherever a .source-btn exists) ----------
- * The "via AirNow · Updated 19m ago" stamp on Overview/Outside/Forecast IS
- * the picker: tapping it opens a small sheet listing all four providers,
- * each with its own live AQI (from /api/outside/all -- one best-effort call
- * per provider server-side, no extra upstream traffic beyond what browsing
- * them individually would cost), so switching sources is also how you see
- * what the other three are reading. This replaced the provider chip row that
- * sat inside the fixed bottom nav on three of four pages: "AirNow / Google /
- * PurpleAir / OWM" is a data-source concern, not navigation, and it doubled
- * the height of the app's one permanently-visible surface with a row of
- * jargon a non-technical user never needs to see.
+ * (self-initializing wherever the header's .source-pill exists) ----------
+ * A labeled pill in the header, next to the Home/Away rail -- both controls
+ * answer the same question, "whose outside numbers am I looking at?". The
+ * pill opens a small menu listing all four providers, each with its own
+ * live AQI (from /api/outside/all -- one best-effort call per provider
+ * server-side, no extra upstream traffic beyond what browsing them
+ * individually would cost), so switching sources is also how you see what
+ * the other three are reading. Anchored under the pill on desktop and a
+ * bottom sheet on phones, exactly like the settings panel, so it never
+ * floats over content it can't be read against.
+ * (v1 of this control was the "via X" timestamp itself, underlined -- nobody
+ * found it, and the menu had no surface of its own. v0 was a provider chip
+ * row inside the fixed bottom nav, which doubled the height of the app's one
+ * permanently-visible surface with a row of jargon.)
  * One shared choice across Home and Away (not per-mode) -- a provider
  * silently changing underneath you when you flip modes turned out to be more
  * confusing than useful. PROVIDER_NAMES/PROVIDER_ORDER above. */
@@ -331,10 +334,11 @@ function currentProvider() {
 }
 
 (function initSourcePicker() {
-  if (!document.querySelector(".source-btn")) return;
+  const pill = document.querySelector(".source-pill");
+  if (!pill) return;
 
   const backdrop = document.createElement("div");
-  backdrop.className = "settings-backdrop";
+  backdrop.className = "source-backdrop";
   backdrop.hidden = true;
   const sheet = document.createElement("div");
   sheet.className = "source-sheet";
@@ -343,16 +347,24 @@ function currentProvider() {
   sheet.hidden = true;
   document.body.append(backdrop, sheet);
 
-  let openTrigger = null;
   // Last /api/outside/all payload -- kept so a re-open renders instantly with
   // the previous numbers while the refresh below overwrites them in place.
   let summary = null;
 
+  // The pill always shows the current selection; its dot carries that
+  // provider's live band color once the summary has loaded.
+  function renderPill() {
+    const s = summary && summary[currentProvider()];
+    const color = s && s.available ? bandVar(s.band) : "var(--ink-dim)";
+    pill.innerHTML = `<span class="pc-dot" style="--pc-color: ${color}"></span>` +
+      `${PROVIDER_NAMES[currentProvider()]}<span class="sp-caret" aria-hidden="true">▾</span>`;
+  }
+
   function render() {
-    // The Forecast page's trigger carries data-restrict-forecast: it's the
-    // one place a provider with no forecast (PurpleAir) can't be picked at
-    // all -- everywhere else it's a perfectly valid live-conditions source.
-    const restrictForecast = !!(openTrigger && openTrigger.dataset.restrictForecast === "true");
+    // The Forecast page's pill carries data-restrict-forecast: it's the one
+    // place a provider with no forecast (PurpleAir) can't be picked at all
+    // -- everywhere else it's a perfectly valid live-conditions source.
+    const restrictForecast = pill.dataset.restrictForecast === "true";
     sheet.innerHTML = '<div class="source-sheet-head">Outdoor data source</div>' +
       PROVIDER_ORDER.map((p) => {
         const s = summary && summary[p];
@@ -379,25 +391,39 @@ function currentProvider() {
     } catch (e) { /* keep the last summary */ }
   }
 
-  function openSheet(trigger) {
-    openTrigger = trigger;
+  // Same anchoring strategy as the settings panel: JS places the menu under
+  // the pill on desktop; below 560px CSS turns it into a bottom sheet and
+  // this skips the inline coordinates so that can win without !important.
+  function positionSheet() {
+    if (window.innerWidth <= 560) {
+      sheet.style.top = "";
+      sheet.style.right = "";
+      return;
+    }
+    const rect = pill.getBoundingClientRect();
+    sheet.style.top = `${rect.bottom + 8}px`;
+    sheet.style.right = `${Math.max(20, window.innerWidth - rect.right)}px`;
+  }
+
+  function openSheet() {
     render(); // instant, from the last summary (bare names on the first open)
+    positionSheet();
     sheet.hidden = false;
     backdrop.hidden = false;
-    trigger.setAttribute("aria-expanded", "true");
+    pill.setAttribute("aria-expanded", "true");
+    window.addEventListener("resize", positionSheet);
     refreshSummary().then(() => { if (!sheet.hidden) render(); });
   }
   function closeSheet() {
     sheet.hidden = true;
     backdrop.hidden = true;
-    if (openTrigger) openTrigger.setAttribute("aria-expanded", "false");
-    openTrigger = null;
+    pill.setAttribute("aria-expanded", "false");
+    window.removeEventListener("resize", positionSheet);
   }
 
   document.addEventListener("click", (e) => {
-    const trigger = e.target.closest(".source-btn");
-    if (trigger) {
-      if (sheet.hidden) openSheet(trigger); else closeSheet();
+    if (e.target.closest(".source-pill")) {
+      if (sheet.hidden) openSheet(); else closeSheet();
       return;
     }
     const row = e.target.closest(".source-row");
@@ -416,8 +442,13 @@ function currentProvider() {
   // the new location, and the numbers cached from the old one would lie.
   document.addEventListener("modechange", () => {
     summary = null;
-    if (!sheet.hidden) refreshSummary().then(render);
+    renderPill();
+    refreshSummary().then(() => { renderPill(); if (!sheet.hidden) render(); });
   });
+  document.addEventListener("providerchange", renderPill);
+
+  renderPill();
+  refreshSummary().then(renderPill);
 })();
 
 function setProvider(provider) {

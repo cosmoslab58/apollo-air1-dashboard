@@ -5,6 +5,7 @@
 <body>
 
 {% set show_away_mode = true %}
+{% set show_source_pill = true %}
 {# No temperature is rendered on Overview (the racks are PM2.5/PM10/CO2/VOC
    and pollutants) -- the °F/°C row would be a control that changes nothing.
    Indoor and Outdoor, which do chart temperature, still show it. #}
@@ -60,9 +61,9 @@
         </div>
         <div class="rack-rows" id="outside-rows"></div>
         <div class="rack-foot">
-          {# The "via AirNow · Updated 19m ago" stamp doubles as the data-source
-             picker -- the source name IS the control that changes it. #}
-          <button type="button" class="rack-updated provider-status source-btn" id="out-updated" aria-haspopup="dialog" aria-expanded="false"></button>
+          {# Informational only -- the source is switched from the header's
+             source pill (chrome_header.html). #}
+          <span class="rack-updated provider-status" id="out-updated"></span>
         </div>
       </div>
 

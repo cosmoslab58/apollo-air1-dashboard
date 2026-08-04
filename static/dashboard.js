@@ -95,10 +95,9 @@
   }
 
   /* ---------- provider switch (AirNow / Google / PurpleAir / OpenWeatherMap) ----------
-   * The source picker itself (the "via X" stamp in the Outside rack-foot),
-   * currentProvider(), and the shared "modechange" re-fetch all live in
-   * common.js. This page only needs to react to a provider actually
-   * changing. */
+   * The source picker itself (the header's source pill), currentProvider(),
+   * and the shared "modechange" re-fetch all live in common.js. This page
+   * only needs to react to a provider actually changing. */
   function providerLabel() {
     return PROVIDER_NAMES[currentProvider()] || "AirNow";
   }
@@ -231,8 +230,8 @@
       document.getElementById("out-sub").textContent = "";
       lastOutsidePollutants = null;
       document.getElementById("outside-rows").innerHTML = "";
-      // Still "via X" -- this stamp is also the source picker, and an
-      // unreachable provider is exactly when you need it to switch away.
+      // Still "via X" -- naming the source that failed is what makes the
+      // header pill the obvious way out.
       document.getElementById("out-updated").textContent = `via ${providerLabel()}`;
     }
   }

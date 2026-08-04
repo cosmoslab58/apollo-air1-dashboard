@@ -144,8 +144,8 @@
      The one fixed surface at the bottom of every page: the four-tab page
      nav, icon over label -- the standard mobile bottom-nav pattern, since
      this is an installed PWA on phones. The provider row that used to stack
-     above it moved into the source picker (the "via X" stamp next to each
-     outside reading, see common.js): data-source selection is an expert
+     above it moved into the header's source-pill picker (see common.js):
+     data-source selection is an expert
      concern, not navigation, and it doubled the height of the app's one
      permanently-visible surface. Replaces the old scattered "Details →"
      pills and the icon-only back button -- there's always exactly one
@@ -279,6 +279,16 @@
     .header-controls { gap: 6px; }
     .mode-rail button { padding: 11px 10px; }
     .device-name { font-size: 0.875rem; }
+  }
+  /* With the source pill in the header there isn't room for the brand lockup
+     on a phone -- it was hard-clipping mid-word beside three controls. The
+     pill/rail/gear simply ARE the header at this width (spread across the
+     full row); pages without the pill (Inside, Device) keep the brand. */
+  @media (max-width: 540px) {
+    .faceplate-inner:has(.source-pill) .device-id { display: none; }
+    .faceplate-inner:has(.source-pill) .header-controls {
+      flex: 1 1 auto; justify-content: space-between;
+    }
   }
 
   .settings-backdrop {
@@ -728,7 +738,6 @@
   color: var(--ink-dim); font-size: 1.25rem; line-height: 1; font-weight: 400;
 }
 .rack--tappable .rack-zone { padding-right: 20px; }
-.rack--tappable .source-btn { position: relative; z-index: 2; }
 @media (hover: hover) {
   .rack--tappable:hover { box-shadow: var(--shadow-raised); }
   .rack--tappable:hover .rack-chevron { color: var(--ink); }
@@ -738,40 +747,55 @@
 @container (max-width: 220px) { .rack-head { padding: 10px 10px 8px; } }
 
 /* ---------- data-source picker ----------
-   The "via AirNow · Updated 19m ago" stamp IS the control that changes the
-   source (see common.js) -- the provider's name doubles as the picker's
-   trigger, underlined with a chevron so it reads as tappable while keeping
-   .provider-status's fine-print voice. This replaced the provider chip row
-   that used to sit inside the fixed bottom nav. */
-.source-btn {
-  background: none; border: none; cursor: pointer;
-  font-family: inherit; text-align: left;
-  /* Padding widens the tap target; the matching negative margin keeps the
-     visible box where the plain span sat so surrounding spacing holds. */
-  padding: 8px 0; margin: -8px 0;
-  text-decoration: underline; text-underline-offset: 3px;
-  text-decoration-color: color-mix(in srgb, var(--ink-dim) 55%, transparent);
+   A labeled pill in the header (next to the Home/Away rail -- see
+   chrome_header.html) opens the provider menu. It reads as a button because
+   it is one: sunken surface, hairline border, caret. The dot carries the
+   selected provider's live band color. */
+.source-pill {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  font-family: inherit; font-size: 0.8125rem; font-weight: 600;
+  color: var(--ink); background: var(--panel-sunken);
+  border: 1px solid var(--hairline); border-radius: 999px;
+  padding: 8px 12px; min-height: 36px; cursor: pointer;
+  transition: background 150ms ease;
 }
-/* Survives textContent updates -- a pseudo-element isn't a child node. */
-.source-btn::after { content: " ▾"; font-size: 0.625rem; }
-@media (hover: hover) { .source-btn:hover { color: var(--ink); } }
-.source-btn:empty { display: none; }
+.source-pill[aria-expanded="true"] { background: var(--hairline); }
+@media (hover: hover) { .source-pill:hover { background: var(--hairline); } }
+.source-pill .sp-caret { font-size: 0.625rem; color: var(--ink-dim); }
+.pc-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--pc-color, var(--ink-dim)); }
+@media (max-width: 480px) {
+  .source-pill { padding: 8px 10px; font-size: 0.75rem; gap: 5px; }
+}
 
-/* The sheet: same raised-surface family as the settings panel, floated
-   above the tab bar and centered -- one placement that works at every
-   width, no popover coordinate math. */
+/* A visible scrim, unlike the settings backdrop -- the menu opens over
+   dense content (charts, racks) and the dimming is what separates it. */
+.source-backdrop {
+  position: fixed; inset: 0; z-index: 25;
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+}
+.source-backdrop[hidden] { display: none; }
+
+/* The menu: an opaque raised panel (same recipe as the settings popover --
+   it MUST carry its own surface, it opens over charts), anchored under the
+   pill by JS on desktop and a fixed bottom sheet below 560px, exactly like
+   the settings panel. */
 .source-sheet {
-  position: fixed; z-index: 30;
-  left: 50%; transform: translateX(-50%);
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-  width: min(340px, calc(100vw - 24px));
+  position: fixed; z-index: 30; width: 280px;
+  background: var(--panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-raised);
   padding: 4px 8px 8px;
-  animation: sourcesheetin 160ms ease both;
+  animation: settingsin 140ms ease both;
 }
 .source-sheet[hidden] { display: none; }
-@keyframes sourcesheetin {
-  from { opacity: 0; transform: translate(-50%, 8px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+@media (max-width: 560px) {
+  .source-sheet {
+    left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); top: auto;
+    width: auto;
+    animation: sourcesheetup 180ms ease both;
+  }
+  @keyframes sourcesheetup { from { transform: translateY(12px); } to { transform: translateY(0); } }
 }
 .source-sheet-head {
   font-size: 0.75rem; color: var(--ink-dim); font-weight: 600;
@@ -798,7 +822,6 @@
 }
 .source-row[data-unavailable="true"] { opacity: 0.55; }
 .source-row:disabled { opacity: 0.4; cursor: not-allowed; }
-.source-row .pc-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--pc-color, var(--ink-dim)); }
 .source-row .source-row-name { flex: none; }
 /* The why-it's-dim reason ("no away location set", "No forecast") -- kept to
    one truncated line so an API's long sentence can't blow the row open. */
