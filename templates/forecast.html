@@ -5,18 +5,20 @@
 <body>
 
 {% set show_away_mode = true %}
-{% set show_source_pill = true %}
-{# The one page where a provider with no forecast (PurpleAir) can't be
-   picked at all -- everywhere else it's a valid live-conditions source. #}
-{% set restrict_forecast = true %}
 {% set show_units_row = false %}
 {% include "_partials/chrome_header.html" %}
 
 <div class="wrap">
   <main class="view view-fade">
-    <h1 class="zone-banner zone-banner--outside">
-      <span class="zone-dot"></span> Air quality forecast
-    </h1>
+    {# Title left, source pill right -- same spot as Overview/Outside.
+       data-restrict-forecast: the one page where a provider with no
+       forecast (PurpleAir) can't be picked at all. #}
+    <div class="page-head">
+      <h1 class="zone-banner zone-banner--outside">
+        <span class="zone-dot"></span> Air quality forecast
+      </h1>
+      <button type="button" class="source-pill" aria-haspopup="dialog" aria-expanded="false" data-restrict-forecast="true">AirNow</button>
+    </div>
 
     <div class="forecast-card">
       <div class="forecast-card-head">

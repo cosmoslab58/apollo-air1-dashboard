@@ -4,14 +4,6 @@
       <span class="device-name">CosmosLab<br>Air Quality App</span>
     </div>
     <div class="header-controls">
-      {# The outdoor data source (AirNow/Google/PurpleAir/OWM). Lives in the
-         header next to Home/Away because both answer the same question --
-         "whose outside numbers am I looking at?" -- and a labeled pill up
-         here is discoverable in a way the old underlined timestamp never
-         was. Pages with no outside data (Inside, Device) don't set the flag. #}
-      {% if show_source_pill %}
-      <button type="button" class="source-pill" aria-haspopup="dialog" aria-expanded="false"{% if restrict_forecast %} data-restrict-forecast="true"{% endif %}>AirNow</button>
-      {% endif %}
       {% if show_away_mode %}
       <div class="settings-rail mode-rail" id="mode-rail" role="tablist" aria-label="Location mode">
         <button type="button" data-mode="home" aria-pressed="true">Home</button>

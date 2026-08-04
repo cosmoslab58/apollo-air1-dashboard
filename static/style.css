@@ -280,16 +280,6 @@
     .mode-rail button { padding: 11px 10px; }
     .device-name { font-size: 0.875rem; }
   }
-  /* With the source pill in the header there isn't room for the brand lockup
-     on a phone -- it was hard-clipping mid-word beside three controls. The
-     pill/rail/gear simply ARE the header at this width (spread across the
-     full row); pages without the pill (Inside, Device) keep the brand. */
-  @media (max-width: 540px) {
-    .faceplate-inner:has(.source-pill) .device-id { display: none; }
-    .faceplate-inner:has(.source-pill) .header-controls {
-      flex: 1 1 auto; justify-content: space-between;
-    }
-  }
 
   .settings-backdrop {
     position: fixed; inset: 0; z-index: 25; background: transparent;
@@ -676,6 +666,19 @@
 }
 .zone-banner { margin: 40px 0 14px; }
 .zone-banner:first-child { margin-top: 0; }
+/* Title row: page banner on the left, the source pill on the right -- the
+   pill's one consistent home on every page with outside data (Overview's
+   banner is visually hidden, so there it reads as a lone control above the
+   cards). The header above stays identical on every page. */
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px; min-height: 36px;
+}
+.page-head .zone-banner { margin: 0; min-width: 0; }
+/* margin-left: auto keeps the pill at the right edge even when the row's
+   title is the visually-hidden Overview h1 -- position: absolute takes it
+   out of the flex flow, so space-between alone would park the pill left. */
+.page-head .source-pill { margin-left: auto; }
 /* margin-top: 0 cancels the UA h2 margin -- .zone-banner sets all four sides
    itself so it needs no equivalent, but this one only ever set the bottom. */
 .rack-zone { flex-wrap: wrap; margin: 0 0 12px; }
@@ -752,10 +755,10 @@
 @container (max-width: 220px) { .rack-head { padding: 10px 10px 8px; } }
 
 /* ---------- data-source picker ----------
-   A labeled pill in the header (next to the Home/Away rail -- see
-   chrome_header.html) opens the provider menu. It reads as a button because
-   it is one: sunken surface, hairline border, caret. The dot carries the
-   selected provider's live band color. */
+   A labeled pill in each page's title row (.page-head, top-right of the
+   content on Overview/Outside/Forecast) opens the provider menu. It reads
+   as a button because it is one: sunken surface, hairline border, caret.
+   The dot carries the selected provider's live band color. */
 .source-pill {
   display: inline-flex; align-items: center; gap: 7px; flex: none;
   font-family: inherit; font-size: 0.8125rem; font-weight: 600;
@@ -770,6 +773,13 @@
 .pc-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--pc-color, var(--ink-dim)); }
 @media (max-width: 480px) {
   .source-pill { padding: 8px 10px; font-size: 0.75rem; gap: 5px; }
+}
+/* Landscape-phone tier -- must sit after the .page-head/.source-pill base
+   rules above (the other max-height tiers live before them in the file and
+   would lose the cascade). See the height-keyed tiers by the footer. */
+@media (max-height: 520px) {
+  .page-head { margin-bottom: 4px; min-height: 0; }
+  .source-pill { min-height: 30px; padding: 5px 10px; }
 }
 
 /* A visible scrim, unlike the settings backdrop -- the menu opens over

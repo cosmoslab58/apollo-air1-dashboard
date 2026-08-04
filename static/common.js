@@ -318,10 +318,11 @@ function renderAwayLocationRow() {
 }
 
 /* ---------- data-source picker: AirNow / Google / PurpleAir / OpenWeatherMap
- * (self-initializing wherever the header's .source-pill exists) ----------
- * A labeled pill in the header, next to the Home/Away rail -- both controls
- * answer the same question, "whose outside numbers am I looking at?". The
- * pill opens a small menu listing all four providers, each with its own
+ * (self-initializing wherever a .source-pill exists) ----------
+ * A labeled pill in the page's title row (.page-head -- the same top-right
+ * spot on Overview, Outside, and Forecast; the header itself stays identical
+ * on every page, brand on the left). The pill opens a small menu listing all
+ * four providers, each with its own
  * live AQI (from /api/outside/all -- one best-effort call per provider
  * server-side, no extra upstream traffic beyond what browsing them
  * individually would cost), so switching sources is also how you see what
@@ -408,6 +409,13 @@ function currentProvider() {
       return;
     }
     const rect = pill.getBoundingClientRect();
+    // The pill scrolls with the page; once it leaves the viewport an
+    // anchored menu would be following it off-screen, leaving a scrimmed
+    // page with an invisible dialog open. Dismiss instead.
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      closeSheet();
+      return;
+    }
     sheet.style.top = `${rect.bottom + 8}px`;
     sheet.style.right = `${Math.max(20, window.innerWidth - rect.right)}px`;
     // Same short-viewport cap as the settings panel -- see
@@ -422,6 +430,10 @@ function currentProvider() {
     backdrop.hidden = false;
     pill.setAttribute("aria-expanded", "true");
     window.addEventListener("resize", positionSheet);
+    // Unlike the settings gear (sticky header), the pill scrolls with the
+    // page -- the fixed backdrop doesn't block wheel/touch scrolling, so the
+    // anchored menu has to follow its trigger or it visibly detaches.
+    window.addEventListener("scroll", positionSheet, { passive: true });
     refreshSummary().then(() => { if (!sheet.hidden) render(); });
   }
   function closeSheet() {
@@ -429,6 +441,7 @@ function currentProvider() {
     backdrop.hidden = true;
     pill.setAttribute("aria-expanded", "false");
     window.removeEventListener("resize", positionSheet);
+    window.removeEventListener("scroll", positionSheet);
   }
 
   document.addEventListener("click", (e) => {

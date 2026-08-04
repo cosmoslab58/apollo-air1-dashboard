@@ -5,7 +5,6 @@
 <body>
 
 {% set show_away_mode = true %}
-{% set show_source_pill = true %}
 {# No temperature is rendered on Overview (the racks are PM2.5/PM10/CO2/VOC
    and pollutants) -- the °F/°C row would be a control that changes nothing.
    Indoor and Outdoor, which do chart temperature, still show it. #}
@@ -21,7 +20,15 @@
        title above two cards that already say "Inside" and "Outside" would be
        redundant on screen. Hidden rather than absent so the page still starts
        at h1 for a screen reader, and the rack headings below stay h2. #}
-    <h1 class="visually-hidden">Air quality overview</h1>
+    {# The source pill sits in the same top-right spot on every page with
+       outside data (the title row on Outside/Forecast) -- here the h1 is
+       visually hidden, so the row reads as a lone control above the cards.
+       Deliberately NOT in the header: the brand lockup owns the top-left on
+       every page, whatever the width. #}
+    <div class="page-head">
+      <h1 class="visually-hidden">Air quality overview</h1>
+      <button type="button" class="source-pill" aria-haspopup="dialog" aria-expanded="false">AirNow</button>
+    </div>
     <div class="rack-grid">
 
       {# Each rack is a stretched link to its details page (rack-link's ::after

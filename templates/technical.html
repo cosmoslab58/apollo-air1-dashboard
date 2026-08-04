@@ -5,16 +5,20 @@
 <body>
 
 {% set show_away_mode = true %}
-{% set show_source_pill = true %}
 {% set show_units_row = true %}
 {% include "_partials/chrome_header.html" %}
 
 <div class="wrap">
   <main class="view view-fade">
 
-    <h1 class="zone-banner zone-banner--outside">
-      <span class="zone-dot"></span> Outside <span class="zone-sub">— near <span id="outside-area-tech">—</span></span>
-    </h1>
+    {# Title left, source pill right -- the same top-right spot the pill
+       occupies on Overview and Forecast. #}
+    <div class="page-head">
+      <h1 class="zone-banner zone-banner--outside">
+        <span class="zone-dot"></span> Outside <span class="zone-sub">— near <span id="outside-area-tech">—</span></span>
+      </h1>
+      <button type="button" class="source-pill" aria-haspopup="dialog" aria-expanded="false">AirNow</button>
+    </div>
 
     <div class="section">
       <div class="section-head">
