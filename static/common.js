@@ -227,12 +227,18 @@ document.addEventListener("click", (e) => {
     if (window.innerWidth <= 560) {
       settingsPanel.style.top = "";
       settingsPanel.style.right = "";
+      settingsPanel.style.maxHeight = "";
       return;
     }
     const rect = settingsToggle.getBoundingClientRect();
     const margin = 20;
     settingsPanel.style.top = `${rect.bottom + 8}px`;
     settingsPanel.style.right = `${Math.max(margin, window.innerWidth - rect.right)}px`;
+    // Cap to the space below the anchor: on a short-but-wide viewport
+    // (landscape phone) the panel is taller than what's left under the gear,
+    // and without this its last rows sat unreachable past the fold. The CSS
+    // overflow-y: auto is what turns the cap into scrolling.
+    settingsPanel.style.maxHeight = `${window.innerHeight - rect.bottom - 20}px`;
   }
   function openSettings() {
     positionSettingsPanel();
@@ -398,11 +404,15 @@ function currentProvider() {
     if (window.innerWidth <= 560) {
       sheet.style.top = "";
       sheet.style.right = "";
+      sheet.style.maxHeight = "";
       return;
     }
     const rect = pill.getBoundingClientRect();
     sheet.style.top = `${rect.bottom + 8}px`;
     sheet.style.right = `${Math.max(20, window.innerWidth - rect.right)}px`;
+    // Same short-viewport cap as the settings panel -- see
+    // positionSettingsPanel.
+    sheet.style.maxHeight = `${window.innerHeight - rect.bottom - 20}px`;
   }
 
   function openSheet() {

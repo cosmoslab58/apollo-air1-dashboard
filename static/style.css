@@ -298,6 +298,11 @@
     position: fixed; z-index: 30; width: 220px;
     box-shadow: var(--shadow-raised);
     padding: 6px 16px 12px; display: flex; flex-direction: column;
+    /* The anchored (desktop) mode gets a JS max-height cap sized to the space
+       under the gear (see positionSettingsPanel) -- this is what turns that
+       cap into scrolling on short-but-wide viewports (landscape phones),
+       where the panel's last rows used to sit unreachable past the fold. */
+    overflow-y: auto;
     animation: settingsin 140ms ease both;
   }
   .settings-panel[hidden] { display: none; }
@@ -786,6 +791,9 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow-raised);
   padding: 4px 8px 8px;
+  /* Scrolls within the JS max-height cap on short viewports -- same
+     arrangement as .settings-panel above. */
+  overflow-y: auto;
   animation: settingsin 140ms ease both;
 }
 .source-sheet[hidden] { display: none; }
