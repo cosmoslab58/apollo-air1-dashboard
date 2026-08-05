@@ -296,9 +296,28 @@ broadly, add a shared-secret/token check on the `/api/control/*` routes (the
 three handlers already share a single guard helper, so it's a one-place
 change) rather than relying on the network boundary alone.
 
+The **broker** is a separate boundary and is no longer wide open. As of
+2026-08-05 this app authenticates with its own account (`nathan`), scoped by
+topic ACL to `cosmos-lab/smarthome/air1/#` and nothing else — it cannot see or
+write another device's tree, let alone another tenant's. Note the consequence
+when changing `MQTT_TOPIC_PREFIX`: a prefix outside that root is **silently
+denied** at QoS 0, so the app will look healthy and simply stop receiving.
+Config and rationale live in
+[`coslab-mqtt-broker`](https://github.com/cosmoslab58/coslab-mqtt-broker).
+
+## Hosting a second instance
+
+Broker-side tenant isolation is done, but this app is **not yet multi-tenant**.
+It reads one `MQTT_TOPIC_PREFIX` per container, so a second tenant means a
+second container today. They would also need their own API keys for all four
+providers, and the Node-RED ingestion flow still hardcodes `cosmos-lab/...`.
+See the Phase 5 notes in `coslab-mqtt-broker`.
+
 ## Related repos
 
 - [`apollo-air1-mqtt-esphome`](../apollo-air1-mqtt-esphome) — the ESPHome
   firmware and MQTT payload schema.
 - [`coslab-nodered-flows`](../coslab-nodered-flows) — the flow that writes
   into `air_quality`.
+- [`coslab-mqtt-broker`](../coslab-mqtt-broker) — broker accounts, topic ACLs,
+  and the watcher that alerts when a publish is denied.
