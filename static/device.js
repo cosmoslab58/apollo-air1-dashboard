@@ -143,8 +143,15 @@
         bright.value = String(s.led_brightness);
         document.getElementById("val-led-brightness").textContent = String(Math.round(s.led_brightness));
       }
+      const nightBright = document.getElementById("led-night-brightness");
+      if (typeof s.led_night_brightness === "number" && document.activeElement !== nightBright) {
+        nightBright.value = String(s.led_night_brightness);
+        document.getElementById("val-led-night-brightness").textContent =
+          String(Math.round(s.led_night_brightness));
+      }
       setRocker("rocker-led-mode", !!s.led_alarm_mode);
       syncLedBrightnessHelp(!!s.led_alarm_mode);
+      renderLedRamp(s);
 
       Object.entries(stepperConf).forEach(([key, conf]) => {
         const v = s[conf.stateKey];
@@ -239,29 +246,84 @@
   // else, which makes 0 mean "dark between alarms" rather than "LED off"
   // whenever the strobe is armed. Neither control is ever disabled -- both
   // always do something.
+  const ledNightBrightness = document.getElementById("led-night-brightness");
+  const ledNightBrightnessLabel = document.getElementById("val-led-night-brightness");
+  const ledNightBrightnessHelp = document.getElementById("help-led-night-brightness");
+
   function syncLedBrightnessHelp(alarmOn) {
     ledBrightnessHelp.textContent = alarmOn
-      ? "0 leaves the LED dark until the strobe fires — the strobe ignores this"
-      : "0 turns the LED off entirely";
+      ? "While the sun is up. 0 leaves the LED dark until the strobe fires — the strobe ignores this"
+      : "While the sun is up. 0 turns the LED off entirely";
+    ledNightBrightnessHelp.textContent = alarmOn
+      ? "After sunset. 0 leaves it dark until dawn — the strobe still fires"
+      : "After sunset. 0 leaves it dark until dawn";
   }
 
-  ledBrightness.addEventListener("input", () => {
-    ledBrightnessLabel.textContent = ledBrightness.value;
-  });
-  ledBrightness.addEventListener("change", async () => {
-    const v = Number(ledBrightness.value);
-    // 0 means different things either side of the alarm switch, and calling it
-    // "LED off" while the strobe is still armed would be a lie.
-    const alarmOn = document.getElementById("rocker-led-mode")
-      .getAttribute("aria-pressed") === "true";
-    try {
-      await postControl("/api/control/number/led_brightness", { value: v });
-      toast(v > 0 ? `LED brightness ${v}%`
-        : alarmOn ? "Dark between alarms — the strobe still fires" : "LED off");
-    } catch (e) {
-      toast("Couldn't send that — " + e.message);
+  // The two sliders are the same control twice over, so they share a wiring
+  // function rather than a copied block that could drift apart.
+  function wireBrightnessSlider(input, label, objectId, what) {
+    input.addEventListener("input", () => {
+      label.textContent = input.value;
+    });
+    input.addEventListener("change", async () => {
+      const v = Number(input.value);
+      // 0 means different things either side of the alarm switch, and calling
+      // it "LED off" while the strobe is still armed would be a lie.
+      const alarmOn = document.getElementById("rocker-led-mode")
+        .getAttribute("aria-pressed") === "true";
+      try {
+        await postControl(`/api/control/number/${objectId}`, { value: v });
+        toast(v > 0 ? `${what} brightness ${v}%`
+          : alarmOn ? `Dark ${what.toLowerCase()} between alarms — the strobe still fires`
+            : `LED off ${what.toLowerCase()}`);
+      } catch (e) {
+        toast("Couldn't send that — " + e.message);
+      }
+    });
+  }
+
+  wireBrightnessSlider(ledBrightness, ledBrightnessLabel, "led_brightness", "Day");
+  wireBrightnessSlider(ledNightBrightness, ledNightBrightnessLabel, "led_night_brightness", "Night");
+
+  // Where the device says the day/night ramp actually is. Every value here is
+  // the device's, never this page's arithmetic: the app has no clock agreement
+  // with the AIR-1 and no copy of its fade curve, so a locally computed
+  // "currently 40%" could contradict the light in the room.
+  //
+  // Stays hidden on older firmware, which reports neither field. It also stays
+  // hidden when the two setpoints are equal -- the ramp is running, but saying
+  // so would be noise about a feature that is doing nothing.
+  function renderLedRamp(s) {
+    const note = document.getElementById("led-ramp-note");
+    const pct = s.led_brightness_effective;
+    const elev = s.sun_elevation_deg;
+    if (typeof pct !== "number") {
+      note.hidden = true;
+      return;
     }
-  });
+    if (typeof s.led_brightness === "number" &&
+        typeof s.led_night_brightness === "number" &&
+        s.led_brightness === s.led_night_brightness) {
+      note.hidden = true;
+      return;
+    }
+    let where = "";
+    if (typeof elev === "number") {
+      // The same thresholds the firmware fades between (+3°/-6°). Only used to
+      // name what is happening -- the percentage above is the real answer, so
+      // a label that disagreed with the number would be cosmetic, not wrong.
+      if (elev >= 3) where = " — daylight";
+      else if (elev <= -6) where = " — night";
+      else where = ` — twilight, sun ${elev.toFixed(1)}°`;
+    } else {
+      // The firmware omits the elevation until its clock has synced, and holds
+      // daytime brightness while that is true. Say so rather than leaving a
+      // bare percentage that looks like the ramp is working.
+      where = " — clock not synced yet, holding daytime level";
+    }
+    note.textContent = `Steady LED now at ${Math.round(pct)}%${where}`;
+    note.hidden = false;
+  }
 
   wireLedRocker("rocker-led-mode", "led_alarm_mode",
     "Alarm mode — the strobe is armed",

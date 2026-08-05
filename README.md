@@ -98,7 +98,11 @@ python app.py
   persisted to `data/locations.json` (bind-mounted, see above, so they
   survive `docker compose up --build`).
 - `GET /api/controls` — cached state of the device's switches/numbers plus
-  online/offline (from its MQTT birth/LWT `status` topic).
+  online/offline (from its MQTT birth/LWT `status` topic). Also carries
+  `led_brightness_effective` and `sun_elevation_deg`, read out of the device's
+  combined `/state` snapshot rather than from a control topic — see
+  [Day/night LED](#daynight-led). Both are `null` on firmware older than the
+  release that added them.
 - `POST /api/control/switch/<id>`, `/api/control/number/<id>`,
   `/api/control/button/<id>` — publish a command. The AIR-1 deep-sleeps
   between reads, so commands are **best-effort**: they're sent immediately
@@ -149,6 +153,39 @@ Two consequences worth knowing:
 published breakpoint standard, safe to implement anywhere. What a given AQI
 number *means* on the severity scale is the judgement, and that comes from the
 device.
+
+## Day/night LED
+
+The Device page's Status LED card has two brightness sliders, **Day** and
+**Night**. The device eases the steady band colour between them across twilight
+— fully day at sun elevation +3°, fully night at −6°, linear in between, so the
+fade is roughly 35–50 min here and lengthens in winter on its own.
+
+**The device does the fade, not this app and not Node-RED.** The obvious
+alternative — Node-RED computing a curve and publishing to the brightness
+command topic every minute — was rejected because that topic *is* where the
+user's setting is stored: overwriting it every minute leaves nowhere to hold
+"what I want at night", and the slider would read 12% at midnight and 100% at
+noon. It would also stop working whenever Node-RED did, and write flash on
+every step. The firmware got `time:` (SNTP) and `sun:` instead.
+
+Two consequences for this app:
+
+- **Both sliders are plain setpoints.** The interesting value — where the ramp
+  actually is right now — is *reported* by the device in its `/state` snapshot
+  (`led_brightness_effective_pct`, `sun_elevation_deg`) and shown under the
+  sliders. This app deliberately does no sun arithmetic of its own: it has no
+  clock agreement with the AIR-1 and no copy of the fade curve, so anything it
+  computed could contradict the light in the room. Same argument as the band
+  table above.
+- **Night at 0 is the "dark until an emergency" setup.** It reuses the existing
+  master-off (brightness 0 ⇒ LED off), so there's no extra switch. The danger
+  strobe runs at 100% and ignores both sliders, as it always has.
+
+The device takes its coordinates from the same retained `config/home` message
+this app already publishes for Node-RED (see `home_config.py`), falling back to
+a compile-time default. Changing home in the app re-points the sun calculation
+too, with no firmware rebuild.
 
 ## Refresh cadence
 

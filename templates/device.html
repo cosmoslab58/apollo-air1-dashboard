@@ -140,9 +140,17 @@
           brightness slider. VOC is excluded from it by default because a baseline-relative spike
           from cleaning spray or a new package is not an emergency. <strong>Alarm mode</strong>
           below arms it, and nothing else changes it. What the LED does the rest of the time is
-          the <strong>Brightness</strong> slider's business alone: at 0 it stays dark, so dark
+          the <strong>Brightness</strong> sliders' business alone: at 0 it stays dark, so dark
           itself means nothing is wrong; above 0 it shows the steady color and you can read the
-          band without opening this page. The strobe ignores the slider either way.
+          band without opening this page. The strobe ignores the sliders either way.
+        </p>
+        <p class="led-key-note">
+          <strong>Day and night are two settings, not two modes.</strong> The device works out
+          where the sun is from its own clock and your home location, and eases the steady color
+          between the two levels across twilight — so there is no switching moment to notice, and
+          the fade lengthens in winter and shortens in summer on its own. Setting them equal turns
+          the whole thing off. Setting night to 0 gives an LED that is dark from dusk to dawn and
+          still strobes for an emergency, which needs no separate control.
         </p>
       </details>
     </div>
@@ -158,15 +166,32 @@
           <h3>Status LED</h3>
           <div class="control-row">
             <div class="control-label">
-              <span class="cl-name">Brightness</span>
-              <span class="cl-help" id="help-led-brightness">0 turns the LED off entirely</span>
+              <span class="cl-name">Day brightness</span>
+              <span class="cl-help" id="help-led-brightness">While the sun is up. 0 turns the LED off entirely</span>
             </div>
             <div class="slider">
               <input type="range" id="led-brightness" min="0" max="100" step="1" value="100"
-                     aria-label="LED brightness">
+                     aria-label="Daytime LED brightness">
               <span class="slider-value"><span id="val-led-brightness">—</span><span class="stepper-unit">%</span></span>
             </div>
           </div>
+          <div class="control-row">
+            <div class="control-label">
+              <span class="cl-name">Night brightness</span>
+              <span class="cl-help" id="help-led-night-brightness">After sunset. 0 leaves it dark until dawn</span>
+            </div>
+            <div class="slider">
+              <input type="range" id="led-night-brightness" min="0" max="100" step="1" value="100"
+                     aria-label="Night-time LED brightness">
+              <span class="slider-value"><span id="val-led-night-brightness">—</span><span class="stepper-unit">%</span></span>
+            </div>
+          </div>
+          <!-- Reported by the device, not inferred here: the app has no clock
+               agreement with it and no copy of the fade curve, so anything it
+               worked out itself could disagree with the light on the wall --
+               the failure this whole page is built to avoid. Hidden until the
+               device actually reports it (older firmware never will). -->
+          <p class="control-note" id="led-ramp-note" hidden></p>
           <div class="control-row">
             <div class="control-label">
               <span class="cl-name">Alarm mode</span>

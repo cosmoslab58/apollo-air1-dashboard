@@ -408,6 +408,11 @@
   .control-label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
   .control-label .cl-name { font-size: 1rem; font-weight: 600; }
   .control-label .cl-help { font-size: 0.75rem; color: var(--ink-dim); overflow-wrap: anywhere; }
+  /* A reported value sitting under the controls that produced it, rather than
+     a third setting -- indented and un-bolded so it does not read as one. */
+  .control-note {
+    margin: -6px 0 0; font-size: 0.75rem; color: var(--ink-dim); overflow-wrap: anywhere;
+  }
 
   .rocker {
     position: relative; width: 52px; height: 30px; border-radius: 8px;

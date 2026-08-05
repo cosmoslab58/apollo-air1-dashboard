@@ -26,6 +26,13 @@ PREVENT_SLEEP = "prevent_sleep"
 # though the id is still air_quality_led_brightness. Getting this wrong fails
 # silently -- publishes land on a topic nothing subscribes to.
 LED_BRIGHTNESS = "led_brightness"
+# The night half of the pair. LED_BRIGHTNESS above is the DAYTIME value despite
+# its name -- the firmware kept the original name when day/night dimming was
+# added, because ESPHome derives both the MQTT topic and the flash preference
+# key from it and renaming would have broken this topic and reset every
+# deployed unit's stored brightness. The UI labels them "Day" and "Night"; only
+# these two constants know about the asymmetry.
+LED_NIGHT_BRIGHTNESS = "led_night_brightness"
 LED_ALARM_MODE = "led_alarm_mode"
 SLEEP_DURATION = "sleep_duration"
 SEN55_TEMPERATURE_OFFSET = "sen55_temperature_offset"
@@ -174,6 +181,40 @@ def _to_float(v):
         return None
 
 
+def _led_ramp_readback(snapshot):
+    """The day/night ramp's current position, parsed out of the device's
+    combined `/state` snapshot.
+
+    Deliberately reads the snapshot rather than adding two more MQTT entities
+    to the device: the firmware folds both values into the message it already
+    publishes every cycle, so this costs no extra broker traffic. Same accessor
+    path bands.py uses for the retained band table.
+
+    Every failure mode collapses to None -- no snapshot yet, firmware older
+    than the release that added the fields, or a malformed payload. The UI
+    treats None as "the device hasn't told us", which is honest: this is the
+    only part of the LED card the app cannot infer from the two setpoints."""
+    raw = _val(snapshot, "state")
+    if not raw:
+        return {"led_brightness_effective": None, "sun_elevation_deg": None}
+    try:
+        payload = json.loads(raw)
+    except (ValueError, TypeError):
+        return {"led_brightness_effective": None, "sun_elevation_deg": None}
+    if not isinstance(payload, dict):
+        return {"led_brightness_effective": None, "sun_elevation_deg": None}
+
+    effective = payload.get("led_brightness_effective_pct")
+    # -1 is the firmware's "not computed yet" sentinel (the first seconds after
+    # boot), not a brightness. Surface it as unknown rather than as a number.
+    if not isinstance(effective, (int, float)) or isinstance(effective, bool) or effective < 0:
+        effective = None
+    elevation = payload.get("sun_elevation_deg")
+    if not isinstance(elevation, (int, float)) or isinstance(elevation, bool):
+        elevation = None
+    return {"led_brightness_effective": effective, "sun_elevation_deg": elevation}
+
+
 def get_state():
     with _lock:
         snapshot = dict(_state)
@@ -183,7 +224,16 @@ def get_state():
         "status_seen_at": _seen(snapshot, "status"),
         "prevent_sleep": _val(snapshot, f"switch/{PREVENT_SLEEP}/state") == "ON",
         "led_brightness": _to_float(_val(snapshot, f"number/{LED_BRIGHTNESS}/state")),
+        "led_night_brightness": _to_float(_val(snapshot, f"number/{LED_NIGHT_BRIGHTNESS}/state")),
         "led_alarm_mode": _val(snapshot, f"switch/{LED_ALARM_MODE}/state") == "ON",
+        # Where the day/night ramp actually is right now, read out of the
+        # device's combined /state snapshot rather than from a control topic:
+        # these are reported values, not settings, and they ride the snapshot
+        # the device already publishes. None on older firmware, and
+        # sun_elevation_deg is also None until the device's clock has synced
+        # (the firmware omits it rather than sending a 0 that would read as
+        # dusk), which is exactly when the ramp is holding daytime brightness.
+        **_led_ramp_readback(snapshot),
         "sleep_duration_min": _to_float(_val(snapshot, f"number/{SLEEP_DURATION}/state")),
         "sen55_temperature_offset": _to_float(_val(snapshot, f"number/{SEN55_TEMPERATURE_OFFSET}/state")),
         "sen55_humidity_offset": _to_float(_val(snapshot, f"number/{SEN55_HUMIDITY_OFFSET}/state")),
@@ -191,6 +241,7 @@ def get_state():
         "seen_at": {
             "prevent_sleep": _seen(snapshot, f"switch/{PREVENT_SLEEP}/state"),
             "led_brightness": _seen(snapshot, f"number/{LED_BRIGHTNESS}/state"),
+            "led_night_brightness": _seen(snapshot, f"number/{LED_NIGHT_BRIGHTNESS}/state"),
             "led_alarm_mode": _seen(snapshot, f"switch/{LED_ALARM_MODE}/state"),
             "sleep_duration_min": _seen(snapshot, f"number/{SLEEP_DURATION}/state"),
             "sen55_temperature_offset": _seen(snapshot, f"number/{SEN55_TEMPERATURE_OFFSET}/state"),

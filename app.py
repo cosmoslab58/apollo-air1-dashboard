@@ -41,8 +41,11 @@ NUMBER_BOUNDS = {
     mqtt_bridge.SEN55_TEMPERATURE_OFFSET: (-70, 70),
     mqtt_bridge.SEN55_HUMIDITY_OFFSET: (-70, 70),
     mqtt_bridge.DPS310_PRESSURE_OFFSET: (-100, 100),
-    # 0 is the off position, matching the firmware's widened floor.
+    # 0 is the off position, matching the firmware's widened floor. Both halves
+    # of the day/night pair share the range; 0 in the night one is an LED that
+    # goes dark at dusk and still strobes for an alarm.
     mqtt_bridge.LED_BRIGHTNESS: (0, 100),
+    mqtt_bridge.LED_NIGHT_BRIGHTNESS: (0, 100),
 }
 SWITCH_IDS = {
     mqtt_bridge.PREVENT_SLEEP,

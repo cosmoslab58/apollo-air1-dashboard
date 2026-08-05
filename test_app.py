@@ -240,6 +240,31 @@ def test_led_brightness_rejects_out_of_range(client, monkeypatch):
     assert res.status_code == 400
 
 
+def test_led_night_brightness_shares_the_day_slider_bounds(client, monkeypatch):
+    """The night half of the pair is the same control with the same range. 0
+    matters most here: it is how you get an LED that is dark from dusk to dawn
+    and still strobes for an emergency, which has no other control."""
+    _reachable(monkeypatch)
+    published = []
+    monkeypatch.setattr(
+        app_module.mqtt_bridge, "publish_number",
+        lambda object_id, value: published.append((object_id, value)),
+    )
+    for value in (0, 50, 100):
+        res = client.post(
+            "/api/control/number/led_night_brightness", json={"value": value}
+        )
+        assert res.status_code == 200, value
+    assert published == [
+        ("led_night_brightness", 0),
+        ("led_night_brightness", 50),
+        ("led_night_brightness", 100),
+    ]
+    assert client.post(
+        "/api/control/number/led_night_brightness", json={"value": 101}
+    ).status_code == 400
+
+
 def test_control_number_out_of_bounds_is_400(client, monkeypatch):
     _reachable(monkeypatch)
     res = client.post("/api/control/number/sleep_duration", json={"value": 99999})
