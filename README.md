@@ -220,6 +220,17 @@ danger strobe, and while the boot self-test owns the light — decoration never
 softens a warning. See the firmware README for the waveforms and for why they
 are ESPHome effects rather than something driven from here.
 
+**Brightness sets the ceiling on how smooth they can look, and the page does not
+currently say so.** A comfortable indoor brightness is a very small PWM number
+— 33 % is 11/255 — so there are only a handful of hardware levels for the effect
+to move through. The firmware dithers to synthesise more, which is what makes
+the defaults usable, but it cannot invent levels that aren't there: below about
+20 % both effects visibly step, and at 12 % the LED is at 0.7/255 and there is
+nothing left to modulate. Turning **intensity up** also helps, counter-
+intuitively — a wider swing crosses more levels on the way. If an effect looks
+choppy, raise brightness or intensity rather than assuming the waveform is
+wrong.
+
 ## Refresh cadence
 
 The Overview and Indoor pages poll `/api/latest` at a rate that follows the
