@@ -153,6 +153,16 @@
       syncLedBrightnessHelp(!!s.led_alarm_mode);
       renderLedRamp(s);
 
+      if (typeof s.led_ambience === "string") {
+        setAmbience(s.led_ambience);
+      }
+      const intensity = document.getElementById("led-ambience-intensity");
+      if (typeof s.led_ambience_intensity === "number" && document.activeElement !== intensity) {
+        intensity.value = String(s.led_ambience_intensity);
+        document.getElementById("val-led-ambience-intensity").textContent =
+          String(Math.round(s.led_ambience_intensity));
+      }
+
       Object.entries(stepperConf).forEach(([key, conf]) => {
         const v = s[conf.stateKey];
         if (typeof v === "number") {
@@ -259,31 +269,121 @@
       : "After sunset. 0 leaves it dark until dawn";
   }
 
-  // The two sliders are the same control twice over, so they share a wiring
-  // function rather than a copied block that could drift apart.
-  function wireBrightnessSlider(input, label, objectId, what) {
-    input.addEventListener("input", () => {
-      label.textContent = input.value;
+  async function publishBrightness(objectId, v, what) {
+    // 0 means different things either side of the alarm switch, and calling
+    // it "LED off" while the strobe is still armed would be a lie.
+    const alarmOn = document.getElementById("rocker-led-mode")
+      .getAttribute("aria-pressed") === "true";
+    try {
+      await postControl(`/api/control/number/${objectId}`, { value: v });
+      toast(v > 0 ? `${what} brightness ${v}%`
+        : alarmOn ? `Dark ${what.toLowerCase()} between alarms — the strobe still fires`
+          : `LED off ${what.toLowerCase()}`);
+    } catch (e) {
+      toast("Couldn't send that — " + e.message);
+    }
+  }
+
+  // Night can never exceed day: a night level above the day level would mean
+  // the ramp BRIGHTENS the LED at dusk, which is not a setting, it is a
+  // contradiction. The firmware enforces it too (it has to — the device's own
+  // web UI and a raw MQTT publish can both set these), but enforcing it here as
+  // well is what stops you ever seeing the device correct you.
+  //
+  // Both sliders deliberately keep max=100 rather than capping the night
+  // input's max to the day value: two adjacent sliders on visibly different
+  // scales reads as a rendering bug, not as a constraint.
+  function clampNightToDay() {
+    const day = Number(ledBrightness.value);
+    if (Number(ledNightBrightness.value) > day) {
+      ledNightBrightness.value = String(day);
+      ledNightBrightnessLabel.textContent = String(day);
+      return true;
+    }
+    return false;
+  }
+
+  ledBrightness.addEventListener("input", () => {
+    ledBrightnessLabel.textContent = ledBrightness.value;
+    // Dragging day DOWN through night takes night with it, visibly, so the
+    // constraint is something you watch happen rather than discover afterwards.
+    clampNightToDay();
+  });
+  ledBrightness.addEventListener("change", async () => {
+    const dragged = clampNightToDay();
+    await publishBrightness("led_brightness", Number(ledBrightness.value), "Day");
+    // Publish the follower too, and only when it actually moved. The firmware
+    // would clamp it on its own from the day write alone, but leaving it to do
+    // that means the app's next poll silently overwrites a slider the user just
+    // watched move — the correction would look like a lost setting.
+    if (dragged) {
+      await postControl("/api/control/number/led_night_brightness",
+        { value: Number(ledNightBrightness.value) }).catch(() => {});
+    }
+  });
+
+  // Dragging night UP hard-stops at the day value. Clamped on `input` rather
+  // than snapped back after release: a handle that refuses to go further is a
+  // constraint you feel, where a value that jumps backwards on release reads as
+  // the control losing your input.
+  ledNightBrightness.addEventListener("input", () => {
+    clampNightToDay();
+    ledNightBrightnessLabel.textContent = ledNightBrightness.value;
+  });
+  ledNightBrightness.addEventListener("change", async () => {
+    clampNightToDay();
+    await publishBrightness("led_night_brightness", Number(ledNightBrightness.value), "Night");
+  });
+
+  // Ambience. The selection is reflected from the device on every poll, so a
+  // failed publish corrects itself within one interval rather than leaving the
+  // UI asserting something the device never accepted.
+  const ambienceButtons = Array.from(
+    document.querySelectorAll("#seg-ambience button"));
+  const ambienceIntensity = document.getElementById("led-ambience-intensity");
+  const ambienceIntensityLabel = document.getElementById("val-led-ambience-intensity");
+
+  function setAmbience(option) {
+    ambienceButtons.forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.ambience === option));
+      b.disabled = false;
     });
-    input.addEventListener("change", async () => {
-      const v = Number(input.value);
-      // 0 means different things either side of the alarm switch, and calling
-      // it "LED off" while the strobe is still armed would be a lie.
-      const alarmOn = document.getElementById("rocker-led-mode")
-        .getAttribute("aria-pressed") === "true";
+    document.getElementById("row-ambience-intensity")
+      .classList.toggle("is-inactive", option === "Off");
+  }
+
+  ambienceButtons.forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const option = btn.dataset.ambience;
+      const previous = ambienceButtons.find(
+        (b) => b.getAttribute("aria-pressed") === "true");
+      setAmbience(option);
       try {
-        await postControl(`/api/control/number/${objectId}`, { value: v });
-        toast(v > 0 ? `${what} brightness ${v}%`
-          : alarmOn ? `Dark ${what.toLowerCase()} between alarms — the strobe still fires`
-            : `LED off ${what.toLowerCase()}`);
+        await postControl("/api/control/select/led_ambience", { option });
+        toast(option === "Off" ? "Ambience off — steady colour"
+          : `Ambience: ${option}`);
       } catch (e) {
+        // Put the selection back rather than leaving the UI claiming an effect
+        // the device never got. Unlike a slider, there is no numeric value to
+        // fall back to here, so the previous button is the only truth we hold.
+        if (previous) setAmbience(previous.dataset.ambience);
         toast("Couldn't send that — " + e.message);
       }
     });
-  }
+  });
 
-  wireBrightnessSlider(ledBrightness, ledBrightnessLabel, "led_brightness", "Day");
-  wireBrightnessSlider(ledNightBrightness, ledNightBrightnessLabel, "led_night_brightness", "Night");
+  ambienceIntensity.addEventListener("input", () => {
+    ambienceIntensityLabel.textContent = ambienceIntensity.value;
+  });
+  ambienceIntensity.addEventListener("change", async () => {
+    const v = Number(ambienceIntensity.value);
+    try {
+      await postControl("/api/control/number/led_ambience_intensity", { value: v });
+      toast(v > 0 ? `Effect intensity ${v}%` : "Effect held steady");
+    } catch (e) {
+      toast("Couldn't send that — " + e.message);
+    }
+  });
 
   // Where the device says the day/night ramp actually is. Every value here is
   // the device's, never this page's arithmetic: the app has no clock agreement

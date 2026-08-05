@@ -414,6 +414,29 @@
     margin: -6px 0 0; font-size: 0.75rem; color: var(--ink-dim); overflow-wrap: anywhere;
   }
 
+  /* One-of-N picker. Full width on its own row rather than inline with a
+     label, because three option names do not fit beside one on a phone. */
+  .segmented {
+    display: flex; gap: 2px; padding: 2px; border-radius: 9px;
+    background: var(--panel-sunken); border: 1px solid var(--hairline);
+  }
+  .segmented button {
+    flex: 1 1 0; min-width: 0; padding: 7px 4px; border: 0; border-radius: 7px;
+    background: transparent; color: var(--ink-dim); cursor: pointer;
+    font: inherit; font-size: 0.8125rem; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    transition: background 160ms ease, color 160ms ease;
+  }
+  .segmented button[aria-pressed="true"] {
+    background: var(--panel-raised); color: var(--ink);
+    box-shadow: var(--shadow-raised); font-weight: 600;
+  }
+  .segmented button:disabled { cursor: default; opacity: 0.5; }
+  /* The intensity row governs the selected effect, so it fades out rather than
+     vanishing when the effect is Off -- a control that disappears takes its
+     value with it, and this one is still worth seeing. */
+  .control-row.is-inactive { opacity: 0.45; }
+
   .rocker {
     position: relative; width: 52px; height: 30px; border-radius: 8px;
     background: var(--panel-sunken); border: 1px solid var(--hairline); cursor: pointer; flex: none;

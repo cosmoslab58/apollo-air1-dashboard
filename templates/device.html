@@ -199,6 +199,33 @@
             </div>
             <button class="rocker" id="rocker-led-mode" aria-pressed="mixed" disabled aria-label="LED alarm mode"></button>
           </div>
+          <div class="control-row">
+            <div class="control-label">
+              <span class="cl-name">Ambience</span>
+              <span class="cl-help">Gently varies the brightness around whatever you've set. Never changes the colour, and stands down when the air needs watching</span>
+            </div>
+          </div>
+          <!-- One-of-three, not three toggles: the device runs at most one
+               light effect at a time, so a set of switches could show a
+               combination it can never actually be in. Ships all-unpressed and
+               disabled until the device's state has been read, same contract
+               as the rockers. -->
+          <div class="segmented" id="seg-ambience" role="group" aria-label="LED ambience effect">
+            <button type="button" data-ambience="Off" aria-pressed="false" disabled>Off</button>
+            <button type="button" data-ambience="Breathing" aria-pressed="false" disabled>Breathing</button>
+            <button type="button" data-ambience="Steampunk" aria-pressed="false" disabled>Steampunk</button>
+          </div>
+          <div class="control-row" id="row-ambience-intensity">
+            <div class="control-label">
+              <span class="cl-name">Effect intensity</span>
+              <span class="cl-help">How far the brightness swings. 0 holds it steady</span>
+            </div>
+            <div class="slider">
+              <input type="range" id="led-ambience-intensity" min="0" max="100" step="1" value="40"
+                     aria-label="LED ambience intensity">
+              <span class="slider-value"><span id="val-led-ambience-intensity">—</span><span class="stepper-unit">%</span></span>
+            </div>
+          </div>
         </div>
 
         <div class="control-card">

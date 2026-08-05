@@ -34,6 +34,13 @@ LED_BRIGHTNESS = "led_brightness"
 # these two constants know about the asymmetry.
 LED_NIGHT_BRIGHTNESS = "led_night_brightness"
 LED_ALARM_MODE = "led_alarm_mode"
+# Ambience: a decorative modulation of the steady band colour. A SELECT rather
+# than two switches because ESPHome runs at most one light effect at a time, so
+# the states really are mutually exclusive — a pair of toggles could represent
+# a combination the device cannot be in.
+LED_AMBIENCE = "led_ambience"
+LED_AMBIENCE_OPTIONS = ("Off", "Breathing", "Steampunk")
+LED_AMBIENCE_INTENSITY = "led_ambience_intensity"
 SLEEP_DURATION = "sleep_duration"
 SEN55_TEMPERATURE_OFFSET = "sen55_temperature_offset"
 SEN55_HUMIDITY_OFFSET = "sen55_humidity_offset"
@@ -226,6 +233,11 @@ def get_state():
         "led_brightness": _to_float(_val(snapshot, f"number/{LED_BRIGHTNESS}/state")),
         "led_night_brightness": _to_float(_val(snapshot, f"number/{LED_NIGHT_BRIGHTNESS}/state")),
         "led_alarm_mode": _val(snapshot, f"switch/{LED_ALARM_MODE}/state") == "ON",
+        # Passed through as the device's own string rather than mapped to a
+        # bool/enum here: it has to survive a round trip back to the device's
+        # select, whose options are matched by exact name.
+        "led_ambience": _val(snapshot, f"select/{LED_AMBIENCE}/state"),
+        "led_ambience_intensity": _to_float(_val(snapshot, f"number/{LED_AMBIENCE_INTENSITY}/state")),
         # Where the day/night ramp actually is right now, read out of the
         # device's combined /state snapshot rather than from a control topic:
         # these are reported values, not settings, and they ride the snapshot
@@ -243,6 +255,8 @@ def get_state():
             "led_brightness": _seen(snapshot, f"number/{LED_BRIGHTNESS}/state"),
             "led_night_brightness": _seen(snapshot, f"number/{LED_NIGHT_BRIGHTNESS}/state"),
             "led_alarm_mode": _seen(snapshot, f"switch/{LED_ALARM_MODE}/state"),
+            "led_ambience": _seen(snapshot, f"select/{LED_AMBIENCE}/state"),
+            "led_ambience_intensity": _seen(snapshot, f"number/{LED_AMBIENCE_INTENSITY}/state"),
             "sleep_duration_min": _seen(snapshot, f"number/{SLEEP_DURATION}/state"),
             "sen55_temperature_offset": _seen(snapshot, f"number/{SEN55_TEMPERATURE_OFFSET}/state"),
             "sen55_humidity_offset": _seen(snapshot, f"number/{SEN55_HUMIDITY_OFFSET}/state"),
@@ -257,6 +271,15 @@ def publish_switch(object_id, on):
 
 def publish_number(object_id, value):
     _client.publish(f"{_topic_prefix()}/number/{object_id}/command", str(value))
+
+
+def publish_select(object_id, option):
+    """Set a select entity. ESPHome matches the option by exact string, so the
+    value published here has to be one the device's list actually contains — an
+    unknown option is logged on the device and otherwise ignored, which from
+    here is indistinguishable from success. app.py validates against
+    LED_AMBIENCE_OPTIONS before calling."""
+    _client.publish(f"{_topic_prefix()}/select/{object_id}/command", option)
 
 
 def publish_button(object_id):

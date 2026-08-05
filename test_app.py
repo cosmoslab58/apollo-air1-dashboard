@@ -265,6 +265,70 @@ def test_led_night_brightness_shares_the_day_slider_bounds(client, monkeypatch):
     ).status_code == 400
 
 
+def test_ambience_select_accepts_every_option_the_device_has(client, monkeypatch):
+    """The option strings are matched by exact name on the device, and an
+    unknown one is logged there and otherwise ignored — indistinguishable from
+    success at this end. So the allowlist has to be the device's real list."""
+    _reachable(monkeypatch)
+    published = []
+    monkeypatch.setattr(
+        app_module.mqtt_bridge, "publish_select",
+        lambda object_id, option: published.append((object_id, option)),
+    )
+    for option in ("Off", "Breathing", "Steampunk"):
+        res = client.post(
+            "/api/control/select/led_ambience", json={"option": option}
+        )
+        assert res.status_code == 200, option
+    assert published == [
+        ("led_ambience", "Off"),
+        ("led_ambience", "Breathing"),
+        ("led_ambience", "Steampunk"),
+    ]
+
+
+def test_ambience_select_rejects_unknown_option(client, monkeypatch):
+    """A typo must 400 here rather than reaching the device, where it would be
+    dropped silently and look like a control that does nothing."""
+    _reachable(monkeypatch)
+    res = client.post(
+        "/api/control/select/led_ambience", json={"option": "breathing"}
+    )
+    assert res.status_code == 400
+    # The error names the valid options: the caller is a UI that just fell out
+    # of step with the device's list, and "invalid" alone would not say how.
+    assert "Breathing" in res.get_json()["error"]
+
+
+def test_control_unknown_select_is_404(client, monkeypatch):
+    _reachable(monkeypatch)
+    res = client.post("/api/control/select/nope", json={"option": "Off"})
+    assert res.status_code == 404
+
+
+def test_ambience_intensity_accepts_full_range(client, monkeypatch):
+    """0 is a flat effect, not an off switch — the select is the off switch —
+    so the bound has to include it as a real, publishable value."""
+    _reachable(monkeypatch)
+    published = []
+    monkeypatch.setattr(
+        app_module.mqtt_bridge, "publish_number",
+        lambda object_id, value: published.append((object_id, value)),
+    )
+    for value in (0, 40, 100):
+        assert client.post(
+            "/api/control/number/led_ambience_intensity", json={"value": value}
+        ).status_code == 200, value
+    assert published == [
+        ("led_ambience_intensity", 0),
+        ("led_ambience_intensity", 40),
+        ("led_ambience_intensity", 100),
+    ]
+    assert client.post(
+        "/api/control/number/led_ambience_intensity", json={"value": 101}
+    ).status_code == 400
+
+
 def test_control_number_out_of_bounds_is_400(client, monkeypatch):
     _reachable(monkeypatch)
     res = client.post("/api/control/number/sleep_duration", json={"value": 99999})

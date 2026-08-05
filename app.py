@@ -46,10 +46,20 @@ NUMBER_BOUNDS = {
     # goes dark at dusk and still strobes for an alarm.
     mqtt_bridge.LED_BRIGHTNESS: (0, 100),
     mqtt_bridge.LED_NIGHT_BRIGHTNESS: (0, 100),
+    # 0 here is a flat effect, not an off switch — the ambience select is the
+    # off switch. See the firmware's number comment.
+    mqtt_bridge.LED_AMBIENCE_INTENSITY: (0, 100),
 }
 SWITCH_IDS = {
     mqtt_bridge.PREVENT_SLEEP,
     mqtt_bridge.LED_ALARM_MODE,
+}
+# Selects are validated by their option list, not by bounds. The device matches
+# options by exact string and silently ignores anything else, so an unvalidated
+# passthrough here would turn a typo into a control that reports success and
+# does nothing.
+SELECT_OPTIONS = {
+    mqtt_bridge.LED_AMBIENCE: mqtt_bridge.LED_AMBIENCE_OPTIONS,
 }
 BUTTON_IDS = {
     mqtt_bridge.CALIBRATE_SCD40,
@@ -729,6 +739,22 @@ def api_control_number(object_id):
     if unavailable:
         return unavailable
     mqtt_bridge.publish_number(object_id, value)
+    return jsonify({"published": True})
+
+
+@app.route("/api/control/select/<object_id>", methods=["POST"])
+def api_control_select(object_id):
+    options = SELECT_OPTIONS.get(object_id)
+    if options is None:
+        return jsonify({"error": "unknown select"}), 404
+    body = request.get_json(silent=True) or {}
+    option = body.get("option")
+    if option not in options:
+        return jsonify({"error": f"option must be one of: {', '.join(options)}"}), 400
+    unavailable = _mqtt_unavailable_response()
+    if unavailable:
+        return unavailable
+    mqtt_bridge.publish_select(object_id, option)
     return jsonify({"published": True})
 
 

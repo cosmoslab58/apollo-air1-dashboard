@@ -104,7 +104,8 @@ python app.py
   [Day/night LED](#daynight-led). Both are `null` on firmware older than the
   release that added them.
 - `POST /api/control/switch/<id>`, `/api/control/number/<id>`,
-  `/api/control/button/<id>` — publish a command. The AIR-1 deep-sleeps
+  `/api/control/select/<id>` (`{option}`, validated against the device's own
+  option list), `/api/control/button/<id>` — publish a command. The AIR-1 deep-sleeps
   between reads, so commands are **best-effort**: they're sent immediately
   but only take effect once the device is next awake and connected. Return
   `503` if the MQTT broker isn't currently reachable.
@@ -186,6 +187,38 @@ The device takes its coordinates from the same retained `config/home` message
 this app already publishes for Node-RED (see `home_config.py`), falling back to
 a compile-time default. Changing home in the app re-points the sun calculation
 too, with no firmware rebuild.
+
+**Night can never exceed day.** The firmware enforces it (the device's own web
+UI and a raw MQTT publish can set these too), and this app enforces it live so
+you never see the device correct you: dragging Night up hard-stops at the Day
+value, and dragging Day down carries Night with it, visibly. Both sliders keep
+the same 0–100 scale — capping the Night input's `max` would put two adjacent
+sliders on different scales, which reads as a rendering bug rather than as a
+constraint.
+
+## Ambience effects
+
+The Status LED card can also run one of two decorative brightness effects,
+**Breathing** or **Steampunk**, with an intensity slider. They vary the
+brightness around whatever you've set; they never change the colour, the band,
+or how often the device publishes.
+
+Three things about the controls:
+
+- **A segmented picker, not toggles.** The device runs at most one light effect
+  at a time, so the states really are mutually exclusive and a set of switches
+  could display a combination the device can never be in.
+- **This needed select support**, which the app had never had — `publish_select`,
+  a `SELECT_OPTIONS` allowlist and `POST /api/control/select/<id>`. Options are
+  validated against the device's real list here, because the device matches them
+  by exact string and silently ignores anything else: an unvalidated passthrough
+  would turn a typo into a control that reports success and does nothing.
+- **Intensity 0 is a flat effect, not off.** The picker is the off switch.
+
+The effects stand down on their own above band 1 (orange and up), during the
+danger strobe, and while the boot self-test owns the light — decoration never
+softens a warning. See the firmware README for the waveforms and for why they
+are ESPHome effects rather than something driven from here.
 
 ## Refresh cadence
 
