@@ -212,6 +212,37 @@ document.addEventListener("click", (e) => {
   document.dispatchEvent(new CustomEvent("readoutchange"));
 });
 
+/* ---------- popover placement (settings panel + source picker) ----------
+ * The two menus in the app hang under their trigger at every width; the shell
+ * they share is declared once in the popover section of style.css. Below
+ * 560px the CSS stretches them to the screen's gutters for touch-sized rows,
+ * and this stops setting `right` so those values win without !important --
+ * but `top` keeps being set either way, so a menu opened from the header
+ * still visibly descends from the control you touched. (They used to become
+ * bottom sheets at that width, which put the settings panel at the opposite
+ * corner of the screen from its gear.)
+ *
+ * Returns false when the trigger has scrolled out of view, so a caller whose
+ * trigger scrolls with the page can dismiss instead of following it off. */
+function positionPopover(panel, trigger) {
+  const rect = trigger.getBoundingClientRect();
+  if (rect.bottom < 0 || rect.top > window.innerHeight) return false;
+  const gap = 8;
+  panel.style.top = `${rect.bottom + gap}px`;
+  panel.style.right = window.innerWidth > 560
+    ? `${Math.max(20, window.innerWidth - rect.right)}px`
+    : "";
+  // Cap the height to the space between the trigger and the fixed bottom nav,
+  // which style.css turns into scrolling. The nav has to be in the sum: it's
+  // fixed at every width, so without it a tall panel's last rows sit in the
+  // band it covers -- unreachable, and the reason this used to be dodged by
+  // pinning the panel to the bottom of the screen on phones instead.
+  const nav = document.querySelector(".bottom-nav");
+  const navTop = nav ? nav.getBoundingClientRect().top : window.innerHeight;
+  panel.style.maxHeight = `${Math.max(120, navTop - rect.bottom - gap - 12)}px`;
+  return true;
+}
+
 /* ---------- settings panel (self-initializing on every page) ----------
  * openSettingsPanel is exposed on window so the mode-rail (below) can pop it
  * open when Away is tapped with no location saved yet. */
@@ -221,24 +252,10 @@ document.addEventListener("click", (e) => {
   const settingsBackdrop = document.getElementById("settings-backdrop");
   if (!settingsToggle || !settingsPanel || !settingsBackdrop) return;
 
+  // The gear lives in the sticky header, so it can't scroll out of view --
+  // positionPopover's false return can't happen here and needs no handling.
   function positionSettingsPanel() {
-    // Below 560px the panel is a fixed bottom sheet (CSS handles placement) --
-    // clear any inline position so that isn't fought.
-    if (window.innerWidth <= 560) {
-      settingsPanel.style.top = "";
-      settingsPanel.style.right = "";
-      settingsPanel.style.maxHeight = "";
-      return;
-    }
-    const rect = settingsToggle.getBoundingClientRect();
-    const margin = 20;
-    settingsPanel.style.top = `${rect.bottom + 8}px`;
-    settingsPanel.style.right = `${Math.max(margin, window.innerWidth - rect.right)}px`;
-    // Cap to the space below the anchor: on a short-but-wide viewport
-    // (landscape phone) the panel is taller than what's left under the gear,
-    // and without this its last rows sat unreachable past the fold. The CSS
-    // overflow-y: auto is what turns the cap into scrolling.
-    settingsPanel.style.maxHeight = `${window.innerHeight - rect.bottom - 20}px`;
+    positionPopover(settingsPanel, settingsToggle);
   }
   function openSettings() {
     positionSettingsPanel();
@@ -406,29 +423,12 @@ function currentProvider() {
     } catch (e) { /* keep the last summary */ }
   }
 
-  // Same anchoring strategy as the settings panel: JS places the menu under
-  // the pill on desktop; below 560px CSS turns it into a bottom sheet and
-  // this skips the inline coordinates so that can win without !important.
+  // Same placement as the settings panel, from the same helper. The pill
+  // scrolls with the page (the gear doesn't), so unlike there the off-screen
+  // case is real: an anchored menu would follow its trigger out of view and
+  // leave a scrimmed page with an invisible dialog open. Dismiss instead.
   function positionSheet() {
-    if (window.innerWidth <= 560) {
-      sheet.style.top = "";
-      sheet.style.right = "";
-      sheet.style.maxHeight = "";
-      return;
-    }
-    const rect = pill.getBoundingClientRect();
-    // The pill scrolls with the page; once it leaves the viewport an
-    // anchored menu would be following it off-screen, leaving a scrimmed
-    // page with an invisible dialog open. Dismiss instead.
-    if (rect.bottom < 0 || rect.top > window.innerHeight) {
-      closeSheet();
-      return;
-    }
-    sheet.style.top = `${rect.bottom + 8}px`;
-    sheet.style.right = `${Math.max(20, window.innerWidth - rect.right)}px`;
-    // Same short-viewport cap as the settings panel -- see
-    // positionSettingsPanel.
-    sheet.style.maxHeight = `${window.innerHeight - rect.bottom - 20}px`;
+    if (!positionPopover(sheet, pill)) closeSheet();
   }
 
   function openSheet() {

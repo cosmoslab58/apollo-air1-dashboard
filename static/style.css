@@ -264,9 +264,13 @@
     transition: background 150ms ease, color 150ms ease;
   }
   .settings-gear svg { width: 18px; height: 18px; }
-  .settings-gear[aria-expanded="true"] {
-    background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
-  }
+  /* Open state is the same hairline shift .source-pill uses, deliberately --
+     the accent fill this used to take is the app's "this segment is
+     selected" language (see .settings-rail above), so an open gear read as a
+     toggle that had been switched on rather than as a menu that is showing.
+     It was also the brightest thing in the header while the panel was up. */
+  .settings-gear[aria-expanded="true"] { background: var(--hairline); color: var(--ink); }
+  @media (hover: hover) { .settings-gear:hover { background: var(--hairline); color: var(--ink); } }
 
   /* Belt-and-suspenders for the never-wraps rule above: header-controls holds
      its natural size on purpose, so on a narrow phone it's the one that has
@@ -281,59 +285,72 @@
     .device-name { font-size: 0.875rem; }
   }
 
-  .settings-backdrop {
-    position: fixed; inset: 0; z-index: 25; background: transparent;
+  /* ---------- popovers: settings panel + outdoor-source picker ----------
+     Two menus hang off triggers in this app: the header gear's settings panel
+     (markup in _partials/chrome_header.html) and the source picker common.js
+     builds off .source-pill. They're the same object with different contents,
+     so the shell is declared once -- scrim, size, placement, scroll cap,
+     animation. Only the rows inside differ, and legitimately: one is a
+     settings form, the other a list you pick from. Surface/border/radius come
+     from the shared card recipe below, same as every other raised panel. */
+  .settings-backdrop, .source-backdrop {
+    position: fixed; inset: 0; z-index: 25;
+    /* Both menus open over dense content (charts, racks) and the dimming is
+       what separates them from it. The settings backdrop was transparent,
+       which was most of why the two read as different mechanisms -- one
+       announced itself as a layer over the page and the other just appeared. */
+    background: color-mix(in srgb, var(--ink) 18%, transparent);
   }
-  .settings-panel {
-    position: fixed; z-index: 30; width: 220px;
+  .settings-backdrop[hidden], .source-backdrop[hidden] { display: none; }
+  .settings-panel, .source-sheet {
+    position: fixed; z-index: 30; width: 280px;
     box-shadow: var(--shadow-raised);
-    padding: 6px 16px 12px; display: flex; flex-direction: column;
-    /* The anchored (desktop) mode gets a JS max-height cap sized to the space
-       under the gear (see positionSettingsPanel) -- this is what turns that
-       cap into scrolling on short-but-wide viewports (landscape phones),
-       where the panel's last rows used to sit unreachable past the fold. */
+    padding: 4px 8px 8px;
+    /* positionPopover (common.js) caps max-height to the gap between the
+       trigger and the fixed bottom nav -- this is what turns that cap into
+       scrolling rather than rows sitting unreachable past the fold on short
+       viewports (landscape phones). */
     overflow-y: auto;
-    animation: settingsin 140ms ease both;
+    animation: popoverin 140ms ease both;
   }
-  .settings-panel[hidden] { display: none; }
-  /* The panel's own box no longer fades -- only its contents do. Fading the
-     panel faded its background with it, so for the first ~100ms the page
-     showed straight through the popover and the two sets of text overlapped;
-     caught mid-animation it looked like a rendering fault rather than a
-     transition. The opaque surface is now there on the first frame and the
-     movement carries the animation, with the children's fade keeping it from
-     feeling like a hard cut. */
-  @keyframes settingsin { from { transform: translateY(-4px) scale(0.98); } to { transform: translateY(0) scale(1); } }
-  .settings-panel > * { animation: settingscontentin 140ms ease both; }
-  @keyframes settingscontentin { from { opacity: 0; } to { opacity: 1; } }
-  /* Anchoring the popover under the gear needs JS to read its on-screen
-     position -- fragile on phones (dynamic toolbars, safe-area insets move
-     the viewport under it). Below the breakpoint it becomes a plain bottom
-     sheet instead: no coordinate math, just fixed to the screen edges. JS
-     skips setting top/right inline styles at this width so this can win
-     without !important. */
+  .settings-panel { display: flex; flex-direction: column; }
+  .settings-panel[hidden], .source-sheet[hidden] { display: none; }
+  /* The box itself doesn't fade -- only its contents do. Fading the box faded
+     its background with it, so for the first ~100ms the page showed straight
+     through the popover and the two sets of text overlapped; caught
+     mid-animation it looked like a rendering fault rather than a transition.
+     The opaque surface is there on the first frame and the movement carries
+     the animation, with the children's fade keeping it from feeling like a
+     hard cut. */
+  @keyframes popoverin { from { transform: translateY(-4px) scale(0.98); } to { transform: translateY(0) scale(1); } }
+  .settings-panel > *, .source-sheet > * { animation: popovercontentin 140ms ease both; }
+  @keyframes popovercontentin { from { opacity: 0; } to { opacity: 1; } }
+  /* Below 560px both stretch to the screen's gutters so their rows stay
+     touch-sized -- but they still hang from their trigger. positionPopover
+     keeps setting `top` at this width and only drops `right`, so these
+     left/right values win without !important. They used to become bottom
+     sheets pinned to `bottom: 12px` instead, which meant tapping the gear in
+     the top-right corner opened a panel centred at the far end of the screen
+     -- as far from what you touched as the viewport allows -- and put its
+     last row in the band the fixed bottom nav covers. */
   @media (max-width: 560px) {
-    .settings-panel {
-      left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); top: auto;
-      width: auto;
-      /* dvh tracks the real visible viewport on phones (URL bar shown or
-         not); the vh line stays as the fallback for engines without it. */
-      max-height: calc(100vh - 24px);
-      max-height: calc(100dvh - 24px);
-      overflow-y: auto;
-      animation: settingsheetup 180ms ease both;
+    .settings-panel, .source-sheet {
+      left: 12px; right: 12px; bottom: auto; width: auto;
+      animation: popoversheetin 180ms ease both;
     }
-    /* Same reasoning as settingsin above: the sheet slides, its contents fade. */
-    @keyframes settingsheetup { from { transform: translateY(12px); } to { transform: translateY(0); } }
+    /* Same reasoning as popoverin: the sheet moves, its contents fade. It
+       drops from the trigger now, so it travels down rather than up. */
+    @keyframes popoversheetin { from { transform: translateY(-6px); } to { transform: translateY(0); } }
   }
-  .settings-panel-head {
-    font-size: 0.75rem;
-    color: var(--ink-dim); font-weight: 600; padding: 10px 0 8px; border-bottom: 1px solid var(--hairline);
+  .settings-panel-head, .source-sheet-head {
+    font-size: 0.75rem; color: var(--ink-dim); font-weight: 600;
+    padding: 10px 8px 8px; border-bottom: 1px solid var(--hairline); margin-bottom: 4px;
   }
-  /* Label above control, not beside it -- "Data source" plus a two-word
-     AirNow/Google pill don't both fit on one line at this width, and a
-     narrow settings popover reads better as stacked rows anyway. */
-  .settings-row { padding: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+  /* Label above control, not beside it -- "Away location" plus its control
+     don't both fit on one line at this width, and a settings popover reads
+     better as stacked rows anyway. The 8px inset matches .source-row's, so
+     text starts in the same place in both menus. */
+  .settings-row { padding: 12px 8px; display: flex; flex-direction: column; gap: 8px; }
   .settings-row + .settings-row { border-top: 1px solid var(--hairline); }
   .settings-row .cl-name { font-size: 0.875rem; }
   .settings-row .settings-rail { width: 100%; }
@@ -343,7 +360,7 @@
   .settings-device-link {
     display: flex; align-items: center; justify-content: space-between;
     font-size: 0.875rem; font-weight: 600; color: var(--ink);
-    text-decoration: none; padding: 2px 0;
+    text-decoration: none; padding: 2px 8px;
   }
   @media (hover: hover) { .settings-device-link:hover { color: var(--accent); } }
 
@@ -351,7 +368,7 @@
      Every raised panel in the app -- readout tiles, chart cards, racks,
      tables, the settings popover -- is the same recipe, declared once. */
   .readout, .control-card, .chart-card, .table-wrap, .activity-card,
-  .rack, .outside-tech-card, .forecast-card, .settings-panel {
+  .rack, .outside-tech-card, .forecast-card, .settings-panel, .source-sheet {
     background: var(--panel-raised);
     border: 1px solid var(--hairline);
     border-radius: var(--radius);
@@ -859,43 +876,10 @@
   .source-pill { min-height: 30px; padding: 5px 10px; }
 }
 
-/* A visible scrim, unlike the settings backdrop -- the menu opens over
-   dense content (charts, racks) and the dimming is what separates it. */
-.source-backdrop {
-  position: fixed; inset: 0; z-index: 25;
-  background: color-mix(in srgb, var(--ink) 18%, transparent);
-}
-.source-backdrop[hidden] { display: none; }
-
-/* The menu: an opaque raised panel (same recipe as the settings popover --
-   it MUST carry its own surface, it opens over charts), anchored under the
-   pill by JS on desktop and a fixed bottom sheet below 560px, exactly like
-   the settings panel. */
-.source-sheet {
-  position: fixed; z-index: 30; width: 280px;
-  background: var(--panel-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-raised);
-  padding: 4px 8px 8px;
-  /* Scrolls within the JS max-height cap on short viewports -- same
-     arrangement as .settings-panel above. */
-  overflow-y: auto;
-  animation: settingsin 140ms ease both;
-}
-.source-sheet[hidden] { display: none; }
-@media (max-width: 560px) {
-  .source-sheet {
-    left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); top: auto;
-    width: auto;
-    animation: sourcesheetup 180ms ease both;
-  }
-  @keyframes sourcesheetup { from { transform: translateY(12px); } to { transform: translateY(0); } }
-}
-.source-sheet-head {
-  font-size: 0.75rem; color: var(--ink-dim); font-weight: 600;
-  padding: 10px 8px 8px; border-bottom: 1px solid var(--hairline); margin-bottom: 4px;
-}
+/* The menu's scrim, shell, placement, scroll cap, animation and head are all
+   shared with the settings panel -- one declaration up in the popover section
+   by the header rules, since the two are the same object. Only the rows are
+   local to this menu. */
 /* Each row still carries that provider's live AQI dot/value, not just a
    selected state -- tapping between sources is also how you learn what the
    other three are reading. Same flat-button language as the tab bar. */
