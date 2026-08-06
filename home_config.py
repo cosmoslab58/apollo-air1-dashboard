@@ -24,8 +24,12 @@ DATA_DIR = os.environ.get("DATA_DIR", "data")
 HOME_FILE = os.path.join(DATA_DIR, "home.json")
 
 # Retained topic Node-RED subscribes to for the home poll config. Overridable so
-# a test/staging deploy can point at its own topic.
-CONFIG_TOPIC = os.environ.get("HOME_CONFIG_TOPIC", "cosmos-lab/smarthome/air1/config/home")
+# a test/staging deploy -- or another tenant -- can point at its own topic.
+# The default must stay inside this tenant's own root: Node-RED subscribes to
+# the wildcard `+/air1/config/home` and takes the FIRST topic segment as the
+# tenant id, so a topic outside that shape lands under the wrong tenant (or,
+# outside the broker ACL grant, is silently denied at QoS 0).
+CONFIG_TOPIC = os.environ.get("HOME_CONFIG_TOPIC", "cosmoslab/air1/config/home")
 
 ZIP_RE = re.compile(r"^\d{5}$")
 
