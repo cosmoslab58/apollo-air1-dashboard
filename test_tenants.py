@@ -24,19 +24,25 @@ def client():
     return app_module.app.test_client()
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_env(monkeypatch):
+    """Pin the two settings these tests read, rather than inheriting a local
+    .env. CI has no .env, so anything depending on one passes only on a
+    developer's machine -- which is exactly how this file first went green
+    locally and red on the runner. Also clears the per-request tenant
+    afterwards so a value leaked from one test can't decide another's."""
+    monkeypatch.setenv("MQTT_TOPIC_PREFIX", "cosmoslab/air1")
+    monkeypatch.setenv("INFLUX_BUCKET", "air_quality")
+    monkeypatch.delenv("TENANT_LABELS", raising=False)
+    yield
+    tenants.set_current(None)
+
+
 @pytest.fixture
-def two_tenants(monkeypatch):
+def two_tenants(monkeypatch, _hermetic_env):
     """Own tenant plus one other, without touching InfluxDB."""
     monkeypatch.setattr(tenants, "known", lambda force=False: (tenants.own(), OTHER))
     return tenants.own(), OTHER
-
-
-@pytest.fixture(autouse=True)
-def _reset_current():
-    # before_request sets this per request; make sure a leaked value from one
-    # test can't decide another's outcome.
-    yield
-    tenants.set_current(None)
 
 
 # ---------- id validation and resolution ----------
