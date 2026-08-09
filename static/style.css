@@ -1149,6 +1149,39 @@
 }
 .add-location-form button[type="submit"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
+/* Which home is on screen. Borrows the zip input's shape so the settings
+   panel keeps one control vocabulary; full width because a house name is
+   long and unpredictable, unlike the fixed two-way rails above it. */
+.tenant-select {
+  font: inherit; font-size: 0.875rem; padding: 8px 12px; border-radius: 6px;
+  border: 1px solid var(--hairline); background: var(--panel-sunken); color: var(--ink);
+  width: 100%; cursor: pointer;
+}
+.tenant-select:disabled { opacity: 0.6; cursor: progress; }
+
+/* Shown only while viewing another home, directly under the app name -- the
+   caption for everything below it, so it reads as a statement about the whole
+   page rather than a control. Deliberately quiet: it is a standing condition,
+   not a warning, and it can be on screen for a long time. */
+/* Device page only: says plainly that the controls below aren't wired to the
+   home on screen, before anything is tapped. */
+.tenant-notice {
+  margin: 0 0 14px; padding: 10px 14px; border-radius: 8px;
+  font-size: 0.875rem; line-height: 1.45;
+  background: var(--panel-sunken); color: var(--ink-dim);
+  border: 1px solid var(--hairline);
+}
+.tenant-notice strong { color: var(--ink); }
+
+.tenant-badge {
+  display: inline-block; margin-top: 3px;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.02em;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--panel-sunken); color: var(--ink-dim);
+  border: 1px solid var(--hairline);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 .forecast-card {
   padding: 18px 20px;
 }

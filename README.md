@@ -305,13 +305,45 @@ denied** at QoS 0, so the app will look healthy and simply stop receiving.
 Config and rationale live in
 [`coslab-mqtt-broker`](https://github.com/cosmoslab58/coslab-mqtt-broker).
 
-## Hosting a second instance
+## Viewing more than one home
 
-Broker-side tenant isolation is done, but this app is **not yet multi-tenant**.
-It reads one `MQTT_TOPIC_PREFIX` per container, so a second tenant means a
-second container today. They would also need their own API keys for all four
-providers, and the Node-RED ingestion flow still hardcodes `cosmos-lab/...`.
-See the Phase 5 notes in `coslab-mqtt-broker`.
+The dashboard can **show** any home that has logged data, while staying
+**wired** to exactly one.
+
+The split follows the broker. `MQTT_TOPIC_PREFIX` pins the tree this container
+subscribes to and publishes controls on, and the ACL enforces it from the other
+side — so live device state and the control endpoints can only ever be this
+container's own home. Everything else the app renders is an InfluxDB read,
+including "current conditions" for all four outside providers (Node-RED polls
+them in; the app never calls an upstream provider for Home). Node-RED tags every
+point with `tenant`, so scoping those reads to a chosen home covers nearly the
+whole surface in one place.
+
+- **The picker** is in the settings gear, and appears only once a second home
+  has data. The list comes from InfluxDB's `tenant` tag values, not config, so a
+  newly provisioned home shows up on its own. `TENANT_LABELS` gives them
+  readable names; without it the picker shows the raw tenant id.
+- **The tenant id** is the first segment of `MQTT_TOPIC_PREFIX` — the same
+  convention Node-RED uses when it takes the id off `+/air1/state`. One rule on
+  both sides is what stops the two disagreeing about who a reading belongs to.
+- **Selection** is a server-set cookie, overridable per-request with `?tenant=`
+  so a link to one specific home is shareable. An id that isn't a real tenant
+  falls back to this container's own home rather than erroring.
+- **Viewing another home is read-only**, and says so in the header. Live state
+  (`/api/tick`) reports nulls, which the frontend already treats as "no
+  information"; `/api/bands` 404s rather than colouring one home's readings with
+  another device's thresholds; device controls and the home-location save return
+  409.
+
+Every InfluxDB query is scoped in `influx._flux` — one place, so no route or
+provider module can forget. Without it `query_latest`'s `last()` returns
+whichever home reported most recently and indoor history interleaves two houses
+on one chart, with no visible symptom.
+
+A second home still needs its own container to be *controllable*: its own
+broker account and topic ACL, its own device, and its own Node-RED registry row
+(see `coslab-nodered-flows`). Provider API keys live on the Node-RED container,
+which polls once per home — they are not per-tenant here.
 
 ## Related repos
 

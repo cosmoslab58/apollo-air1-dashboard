@@ -19,6 +19,18 @@
       <span class="zone-dot"></span> AIR-1 device <span class="zone-sub">— diagnostics &amp; setup</span>
     </h1>
 
+    {% if not viewing_own %}
+    {# This page is the one place the whole point is *writing* to a device, so
+       it says so up front rather than letting each control fail on tap. The
+       controls below stay rendered and the API still refuses them with a 409 --
+       the notice is the courtesy, the server-side check is the guarantee. #}
+    <p class="tenant-notice">
+      Showing <strong>{{ current_tenant_label }}</strong>, which this dashboard has
+      no live connection to — diagnostics and controls here belong to
+      <strong>{{ own_tenant_label }}</strong>. Switch home in settings to use them.
+    </p>
+    {% endif %}
+
     <div class="section">
       <div class="table-wrap">
         <table>

@@ -2,6 +2,8 @@ import os
 
 from influxdb_client import InfluxDBClient
 
+import tenants
+
 MEASUREMENT = "air_quality"
 
 FIELDS = [
@@ -53,15 +55,28 @@ def _flux(fields, range_start, *, measurement, latest=False, sort=False):
     """Build the one Flux shape every query here uses: filter a measurement to
     a set of fields over a range, pivot fields into columns, and optionally
     take the latest point or sort by time. `latest` and `sort` are mutually
-    exclusive in practice (latest collapses to one point)."""
+    exclusive in practice (latest collapses to one point).
+
+    Every query is scoped to one tenant. This is the single place that happens
+    -- which is the point of doing it here rather than at each call site: the
+    provider modules and every route reach InfluxDB through this function, so
+    none of them can forget. Without it `query_latest`'s `last()` would return
+    whichever home reported most recently and indoor history would interleave
+    two houses on one chart, silently and plausibly. Both measurements are
+    fully tagged (verified: zero untagged points), so an equality match is
+    right and a missing tag should disappear rather than quietly widen the
+    result. The id is validated in tenants.resolve before it can get here."""
     bucket = os.environ["INFLUX_BUCKET"]
     field_filter = " or ".join(f'r._field == "{f}"' for f in fields)
     pipeline = [
         f'from(bucket: "{bucket}")',
         f'|> range(start: {range_start})',
         f'|> filter(fn: (r) => r._measurement == "{measurement}")',
-        f'|> filter(fn: (r) => {field_filter})',
     ]
+    tenant = tenants.current()
+    if tenant:
+        pipeline.append(f'|> filter(fn: (r) => r.tenant == "{tenant}")')
+    pipeline.append(f'|> filter(fn: (r) => {field_filter})')
     if latest:
         pipeline.append('|> last()')
     pipeline.append('|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")')
@@ -74,6 +89,29 @@ def _query(fields, range_start, *, measurement=None, latest=False, sort=False):
     measurement = measurement or OUTSIDE_MEASUREMENT
     flux = _flux(fields, range_start, measurement=measurement, latest=latest, sort=sort)
     return _rows_from(get_client().query_api().query(flux))
+
+
+def query_tenant_ids():
+    """Distinct `tenant` tag values in the bucket, across both measurements.
+
+    Deliberately not derived from a config file: the authoritative answer to
+    "which homes exist" is which ones have logged data, and Node-RED writes
+    that tag on every point. A new tenant therefore shows up in the picker on
+    its own, with no deploy here. 90 days rather than unbounded because
+    tagValues scans the range it is given and an all-time scan gets slower
+    every month for an answer that never reaches back that far anyway."""
+    bucket = os.environ["INFLUX_BUCKET"]
+    flux = (
+        'import "influxdata/influxdb/schema"\n'
+        f'schema.tagValues(bucket: "{bucket}", tag: "tenant", start: -90d)'
+    )
+    ids = []
+    for table in get_client().query_api().query(flux):
+        for record in table.records:
+            value = record.get_value()
+            if value:
+                ids.append(value)
+    return ids
 
 
 def query_latest():

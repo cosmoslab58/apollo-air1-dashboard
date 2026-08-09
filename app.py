@@ -17,6 +17,7 @@ import influx
 import mqtt_bridge
 import owm
 import purpleair
+import tenants
 
 load_dotenv()
 
@@ -79,16 +80,73 @@ if not DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
     home_config.republish_home()
 
 
+@app.before_request
+def _resolve_tenant():
+    """Pin this request to one tenant before any handler runs.
+
+    Everything downstream -- routes, provider modules, influx._flux -- reads it
+    from tenants.current() instead of being passed it, so there is exactly one
+    place a request can be assigned a home and no way for a handler to skip it."""
+    tenants.set_current(tenants.resolve(
+        request.args.get("tenant"), request.cookies.get(tenants.COOKIE)))
+
+
+def _wrong_tenant_response(what):
+    """Shared 409 for the endpoints that only make sense for this container's
+    own home: live device state and anything that publishes to the broker.
+
+    409 rather than 403 -- it isn't a permissions failure to be argued with,
+    it's that the request doesn't apply to what is being viewed. The message
+    names both homes because the likeliest way to hit this is forgetting the
+    picker is set to someone else's house."""
+    return jsonify({
+        "error": f"{what} is only available for {tenants.label(tenants.own())}, "
+                 f"the home this dashboard is connected to — "
+                 f"you're viewing {tenants.label(tenants.current())}",
+        "tenant": tenants.current(),
+        "own_tenant": tenants.own(),
+    }), 409
+
+
 @app.context_processor
 def inject_links():
     # grafana_url: optional external link to the Grafana provider-comparison
     # dashboard, shown in the Device page footer. Unset -> link is omitted.
     # app_version: stamped into every page (see head.html) for the stale-
     # client reload check against /api/tick.
+    # tenant_*: which home is being viewed, and whether it's the one this
+    # container can control -- the templates use viewing_own to decide whether
+    # to render the device controls as live or as read-only.
     return {
         "grafana_url": os.environ.get("GRAFANA_DASHBOARD_URL", ""),
         "app_version": APP_VERSION,
+        "tenant_choices": tenants.choices(),
+        "current_tenant": tenants.current(),
+        "current_tenant_label": tenants.label(tenants.current()),
+        "own_tenant_label": tenants.label(tenants.own()),
+        "viewing_own": tenants.is_own(),
     }
+
+
+@app.route("/api/tenant", methods=["POST"])
+def api_tenant_set():
+    """Save which home to show, then let the caller reload.
+
+    Server-side cookie rather than localStorage because the selection has to
+    be known while rendering -- the picker's own state, and whether the device
+    page draws its controls live or read-only, are both decided in the
+    template. An unknown id is not an error: resolve() falls back to own(), and
+    the response says which tenant actually took effect so a caller is never
+    left believing it switched to something it didn't."""
+    body = request.get_json(silent=True) or {}
+    chosen = tenants.resolve(body.get("tenant"), None)
+    response = jsonify({"tenant": chosen, "label": tenants.label(chosen),
+                        "is_own": tenants.is_own(chosen)})
+    response.set_cookie(
+        tenants.COOKIE, chosen,
+        max_age=tenants.COOKIE_MAX_AGE_S, samesite="Lax", httponly=True,
+    )
+    return response
 
 
 @app.route("/healthz")
@@ -167,6 +225,14 @@ def api_tick():
     "no information" -- the frontend falls back to its own timer rather than
     treating it as an error.
     """
+    # Viewing another home: there is no live link to it, and nulls already mean
+    # "no information" here rather than an error -- so the frontend falls back
+    # to its own timer exactly as it does during a broker outage. Saying null
+    # is honest; reporting this container's own device would attach one home's
+    # live band to another home's readings.
+    if not tenants.is_own():
+        return jsonify({"seen_at": None, "air_band": None, "app_version": APP_VERSION})
+
     raw = mqtt_bridge.get_raw("state")
     air_band = None
     if raw:
@@ -194,6 +260,13 @@ def api_bands():
     readings uncoloured. Substituting a plausible-looking default here is
     precisely how the page and the LED came to disagree.
     """
+    # Another home's readings were graded by *its* device against *its* table,
+    # which this container has never received. Serving ours instead would be
+    # substituting a plausible-looking default -- the exact move this module
+    # exists to refuse. Readings render uncoloured, which is the honest state.
+    if not tenants.is_own():
+        return jsonify({"error": f"no band table for {tenants.label(tenants.current())} — "
+                                 f"this dashboard only receives one from its own device"}), 404
     table = bands.get_table()
     if table is None:
         return jsonify({"error": "no band table received from the device yet"}), 404
@@ -609,6 +682,11 @@ def api_home_set():
     to Node-RED over the retained config topic. Changing home starts a fresh
     Influx series under the new location slug -- old data stays under the old
     one."""
+    # Saving publishes to HOME_CONFIG_TOPIC, which is inside this container's
+    # own tenant root. Allowing it while another home is on screen would move
+    # *our* polling location from a page captioned with someone else's name.
+    if not tenants.is_own():
+        return _wrong_tenant_response("changing the home location")
     body = request.get_json(silent=True) or {}
     zip_code = (body.get("zip") or "").strip()
     label = (body.get("label") or "").strip() or None
@@ -683,6 +761,8 @@ def api_away_clear():
 
 @app.route("/api/controls")
 def api_controls():
+    if not tenants.is_own():
+        return _wrong_tenant_response("device control")
     return jsonify(mqtt_bridge.get_state())
 
 
@@ -699,7 +779,14 @@ def _mqtt_unavailable_response():
     dropped at the broker and never replayed. The control would flip in the UI,
     toast "Sent", and silently snap back on the next poll or refresh -- which
     is exactly what a WiFi/broker dropout looked like from the sofa. Refusing
-    is the honest answer: nothing was sent, and nothing will be."""
+    is the honest answer: nothing was sent, and nothing will be.
+
+    A third way, since the tenant picker: the command would land on this
+    container's own device while the viewer is looking at another home. The
+    check lives here so all four control routes inherit it -- they already
+    share this helper, which is why it was worth having."""
+    if not tenants.is_own():
+        return _wrong_tenant_response("device control")
     if not mqtt_bridge.available():
         return jsonify({"error": "device control is unavailable — MQTT broker not connected"}), 503
     if not mqtt_bridge.device_online():

@@ -2,6 +2,12 @@
   <div class="faceplate-inner">
     <div class="device-id">
       <span class="device-name">CosmosLab<br>Air Quality App</span>
+      {% if not viewing_own %}
+      {# Only when looking at someone else's house. Persistent rather than a
+         dismissible toast: every reading on the page belongs to another home,
+         and that has to stay visible for as long as it's true. #}
+      <span class="tenant-badge" title="Showing logged data for {{ current_tenant_label }}. Live readings and device controls stay with {{ own_tenant_label }}, the home this dashboard is connected to.">{{ current_tenant_label }} · read-only</span>
+      {% endif %}
     </div>
     <div class="header-controls">
       {% if show_away_mode %}
@@ -33,6 +39,21 @@
 <div class="settings-backdrop" id="settings-backdrop" hidden></div>
 <div class="settings-panel" id="settings-panel" role="dialog" aria-label="Settings" hidden>
   <div class="settings-panel-head">Settings</div>
+  {# Hidden entirely while there is only one home -- a picker with one option
+     is noise. It appears on its own as soon as a second tenant logs data,
+     because the list comes from InfluxDB rather than a config file. A select
+     rather than a rail of buttons like the rows below: those are two-way
+     choices, this one grows with however many homes exist. #}
+  {% if tenant_choices|length > 1 %}
+  <div class="settings-row">
+    <span class="cl-name">Home</span>
+    <select class="tenant-select" id="tenant-select" aria-label="Which home to show">
+      {% for tenant_id, tenant_label, tenant_is_own in tenant_choices %}
+      <option value="{{ tenant_id }}"{% if tenant_id == current_tenant %} selected{% endif %}>{{ tenant_label }}{% if not tenant_is_own %} (read-only){% endif %}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
   <div class="settings-row">
     <span class="cl-name">Readout</span>
     <div class="settings-rail readout-toggle" role="tablist" aria-label="Pollutant readout">

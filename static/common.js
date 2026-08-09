@@ -288,6 +288,45 @@ function positionPopover(panel, trigger) {
   window.openSettingsPanel = openSettings;
 })();
 
+/* ---------- tenant picker: which home to show (self-initializing) ----------
+ * Unlike theme/readout/mode, this one is NOT per-browser localStorage state:
+ * the server has to know it while rendering, because the picker's own
+ * selection and whether the device page draws its controls live or read-only
+ * are both decided in the template. So it posts and reloads rather than
+ * re-fetching in place -- a full reload is also the only way to be sure no
+ * chart or card is left holding the previous home's data.
+ *
+ * Absent from the DOM entirely when there is only one home, hence the early
+ * return; this file loads on every page. */
+(function initTenantPicker() {
+  const tenantSelect = document.getElementById("tenant-select");
+  if (!tenantSelect) return;
+
+  tenantSelect.addEventListener("change", async () => {
+    const chosen = tenantSelect.value;
+    const previous = tenantSelect.dataset.current || chosen;
+    tenantSelect.disabled = true;
+    try {
+      const res = await fetch("/api/tenant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenant: chosen }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // The server decides what actually took effect -- an id it doesn't
+      // recognise falls back to this dashboard's own home rather than
+      // failing, so reloading on its answer keeps the page honest about
+      // which home it ended up showing.
+      window.location.reload();
+    } catch (err) {
+      console.error("Could not switch home", err);
+      tenantSelect.value = previous;
+      tenantSelect.disabled = false;
+    }
+  });
+  tenantSelect.dataset.current = tenantSelect.value;
+})();
+
 /* ---------- location mode: Home / Away (self-initializing on every page) ----------
  * A third piece of shared, per-browser client state alongside theme/readout --
  * which location the whole app (dashboard, Technical, Forecast) currently
