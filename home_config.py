@@ -37,15 +37,22 @@ HOME_FILE = os.path.join(DATA_DIR, "home.json")
 # without anyone noticing, because .env and the container env both set
 # HOME_CONFIG_TOPIC explicitly and masked it. A hardcoded default here is a
 # second, independent copy of the topic that nothing keeps in step; deriving it
-# from the same MQTT_HOUSE_PREFIX/MQTT_DEVICE the rest of the app is wired to
-# means it cannot drift on its own again. If those are unset there is no
-# sensible guess, so the default is empty and a publish fails loudly rather than
-# going somewhere plausible and wrong.
-_house = os.environ.get("MQTT_HOUSE_PREFIX", "").strip("/")
+# from the same settings the rest of the app is wired to means it cannot drift
+# on its own again. If they are unset there is no sensible guess, so the default
+# is empty and a publish fails loudly rather than going somewhere plausible and
+# wrong.
+#
+# The root is MQTT_TOPIC_ROOT (everything above the device), NOT the account:
+# since plan 05 the tree is
+# cosmoslab/<category>/<account>/<vendor>/<model>/<device>/<channel...>, so the
+# account is only the third segment and cannot build a topic on its own.
+# MQTT_HOUSE_PREFIX remains the fallback for the pre-plan-05 single-segment tree.
+_root = (os.environ.get("MQTT_TOPIC_ROOT", "").strip("/")
+         or os.environ.get("MQTT_HOUSE_PREFIX", "").strip("/"))
 _device = os.environ.get("MQTT_DEVICE", "").strip("/")
 CONFIG_TOPIC = os.environ.get(
     "HOME_CONFIG_TOPIC",
-    f"{_house}/{_device}/config/home" if _house and _device else "",
+    f"{_root}/{_device}/config/home" if _root and _device else "",
 )
 
 ZIP_RE = re.compile(r"^\d{5}$")

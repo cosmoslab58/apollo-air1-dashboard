@@ -118,11 +118,34 @@ class _Msg:
 
 @pytest.fixture
 def house(monkeypatch):
+    """The LEGACY single-segment tree, where the topic root and the account are
+    the same string. Kept deliberately: the fallback in `_topic_root()` exists
+    for deployments whose env has not moved to MQTT_TOPIC_ROOT yet, and it needs
+    covering. `MQTT_TOPIC_ROOT` is cleared for the same reason the other two
+    are -- a real .env is loaded locally but not in CI, so a test that does not
+    pin its own env passes on one machine and fails on the other."""
     monkeypatch.setenv("MQTT_HOUSE_PREFIX", "walnut")
     monkeypatch.delenv("MQTT_TOPIC_PREFIX", raising=False)
     monkeypatch.delenv("MQTT_DEVICE", raising=False)
+    monkeypatch.delenv("MQTT_TOPIC_ROOT", raising=False)
     monkeypatch.setattr(mqtt_bridge, "_state", {})
     return "walnut"
+
+
+@pytest.fixture
+def topic_root(monkeypatch):
+    """The plan-05 six-segment tree,
+    cosmoslab/<category>/<account>/<vendor>/<model>/<device>/<channel...>.
+
+    MQTT_TOPIC_ROOT is everything ABOVE the device and MUST win over
+    MQTT_HOUSE_PREFIX, which is still set to the bare account for the InfluxDB
+    `tenant` tag -- the whole point of the split is that those two are no longer
+    the same string."""
+    monkeypatch.setenv("MQTT_TOPIC_ROOT", "cosmoslab/smarthome/walnut/apollo/air1")
+    monkeypatch.setenv("MQTT_HOUSE_PREFIX", "walnut")
+    monkeypatch.delenv("MQTT_TOPIC_PREFIX", raising=False)
+    monkeypatch.setattr(mqtt_bridge, "_state", {})
+    return "cosmoslab/smarthome/walnut/apollo/air1"
 
 
 def _deliver(topic, payload):
@@ -171,3 +194,33 @@ def test_command_topics_name_the_device(house):
     assert mqtt_bridge._command_topic("bedroom", "switch", "prevent_sleep") == (
         "walnut/bedroom/switch/prevent_sleep/command"
     )
+
+
+def test_the_topic_root_wins_over_the_account(topic_root):
+    """Regression for the plan-05 split. `_topic_root()` used to be
+    `tenants.own()`, which returns the ACCOUNT -- on the six-segment tree that
+    would subscribe to `walnut/#`, a root nothing publishes to any more, and the
+    dashboard would go silently blank while every other consumer kept working."""
+    assert mqtt_bridge._topic_root() == "cosmoslab/smarthome/walnut/apollo/air1"
+
+
+def test_device_is_the_segment_after_a_multi_segment_root(topic_root):
+    _deliver(topic_root + "/living_room/state", '{"air_band": 1}')
+    _deliver(topic_root + "/bedroom/switch/prevent_sleep/state", "ON")
+    assert mqtt_bridge.get_raw("living_room", "state") == '{"air_band": 1}'
+    assert mqtt_bridge.get_state("bedroom")["prevent_sleep"] is True
+    # The account segment is NOT the device, even though it used to be first.
+    assert mqtt_bridge.get_raw("walnut", "state") is None
+
+
+def test_command_topics_use_the_whole_root(topic_root):
+    assert mqtt_bridge._command_topic("bedroom", "switch", "prevent_sleep") == (
+        "cosmoslab/smarthome/walnut/apollo/air1/bedroom/switch/prevent_sleep/command"
+    )
+
+
+def test_the_old_tree_is_ignored_once_the_root_moves(topic_root):
+    """After Phase 5 nothing publishes here, but during the dual-grant window
+    both trees are live and the bridge must not key the old one by mistake."""
+    _deliver("walnut/living_room/state", '{"air_band": 9}')
+    assert mqtt_bridge._state == {}

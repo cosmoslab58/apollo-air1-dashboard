@@ -78,23 +78,39 @@ _lock = threading.Lock()
 _client = None
 
 
-def _house_prefix():
-    """The topic root this container is wired to: one segment, no slash.
+def _topic_root():
+    """The MQTT topic prefix this container is wired to: everything ABOVE the
+    device segment, no trailing slash.
 
-    Read through tenants.own() rather than from the env directly so there is
-    exactly one rule for "which house are we" -- the ownership checks that
-    decide whether a control is allowed and the subscription that decides
-    whether its state ever arrives must agree, and deriving them separately is
-    how they drift."""
-    return tenants.own()
+    Since plan 05 this is NOT one segment, and NOT the same string as the
+    account. The estate convention is
+
+        cosmoslab/<category>/<account>/<vendor>/<model>/<device>/<channel...>
+
+    so the prefix is the first five segments while the account is only the
+    third of them. `tenants.own()` still returns the ACCOUNT (`walnut`) because
+    that is the InfluxDB `tenant` tag and the thing ownership checks are about.
+    Conflating "which account are we" with "where do this device's topics live"
+    is precisely what this split prevents: they were the same string for as long
+    as the account was segment 0, and they are not any more.
+
+    Falls back to `tenants.own()` so a deployment still on the pre-plan-05
+    single-segment tree keeps working with no env change.
+
+    Scoped to one vendor+model (`.../apollo/air1`), which is honest -- this is
+    an AIR-1 dashboard. If this house ever runs a second *model*, `_on_message`
+    and `_command_topic` need a device -> (vendor, model) map rather than one
+    shared prefix."""
+    root = os.environ.get("MQTT_TOPIC_ROOT", "").strip("/")
+    return root or tenants.own()
 
 
 def _on_connect(client, userdata, flags, reason_code, properties):
-    house = _house_prefix()
+    house = _topic_root()
     if not house:
         # Subscribing to "#" here would pull in every tenant on the broker (and
         # be denied by the ACL anyway). Loud, and no subscription.
-        logger.error("mqtt_bridge: no MQTT_HOUSE_PREFIX/MQTT_TOPIC_PREFIX set; not subscribing")
+        logger.error("mqtt_bridge: no MQTT_TOPIC_ROOT/MQTT_HOUSE_PREFIX set; not subscribing")
         return
     client.subscribe(f"{house}/#")
     logger.info("mqtt_bridge: connected to broker, subscribed to %s/#", house)
@@ -105,16 +121,17 @@ def _on_disconnect(client, userdata, flags, reason_code, properties):
 
 
 def _on_message(client, userdata, msg):
-    house = _house_prefix()
+    house = _topic_root()
     if not house:
         return
     prefix = house + "/"
     if not msg.topic.startswith(prefix):
         return
-    # `<house>/<device>/<suffix...>` -- the same split Node-RED does on the
-    # ingest side (tenant = parts[0], device = parts[-2]). partition rather
-    # than split(maxsplit) because the suffix keeps its own slashes:
-    # "switch/prevent_sleep/state" is one key, not three.
+    # `<topic-root>/<device>/<suffix...>`. Because the root already covers
+    # everything above the device, the segment straight after it IS the device
+    # -- the same position Node-RED reads (parts[5] on the six-segment tree).
+    # partition rather than split(maxsplit) because the suffix keeps its own
+    # slashes: "switch/prevent_sleep/state" is one key, not three.
     device, _, suffix = msg.topic[len(prefix):].partition("/")
     if not device or not suffix:
         # A house-level topic with nothing under it. Nothing reads those, and
@@ -324,12 +341,12 @@ def get_state(device):
 
 
 def _command_topic(device, kind, object_id):
-    """`<house>/<device>/<kind>/<object_id>/command`.
+    """`<topic-root>/<device>/<kind>/<object_id>/command`.
 
     One builder for all four publish helpers so the device segment cannot be
     left out of one of them -- the resulting topic would still look plausible
     (`walnut/switch/...`), be denied by the ACL at QoS 0, and report success."""
-    return f"{_house_prefix()}/{device}/{kind}/{object_id}/command"
+    return f"{_topic_root()}/{device}/{kind}/{object_id}/command"
 
 
 def publish_switch(device, object_id, on):
