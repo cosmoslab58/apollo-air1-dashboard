@@ -76,6 +76,16 @@ def _flux(fields, range_start, *, measurement, latest=False, sort=False):
     tenant = tenants.current()
     if tenant:
         pipeline.append(f'|> filter(fn: (r) => r.tenant == "{tenant}")')
+
+    # Device scoping applies ONLY to the indoor measurement. `device_id` is a
+    # tag on air_quality and does not exist on outside_air_quality -- the
+    # outside readings belong to the house, not to a sensor in it. Filtering
+    # them by device would match nothing and blank every outside panel, which
+    # is the sort of failure that looks like an upstream outage.
+    device = tenants.current_device()
+    if device and measurement == MEASUREMENT:
+        pipeline.append(f'|> filter(fn: (r) => r.device_id == "{device}")')
+
     pipeline.append(f'|> filter(fn: (r) => {field_filter})')
     if latest:
         pipeline.append('|> last()')
@@ -91,27 +101,53 @@ def _query(fields, range_start, *, measurement=None, latest=False, sort=False):
     return _rows_from(get_client().query_api().query(flux))
 
 
-def query_tenant_ids():
-    """Distinct `tenant` tag values in the bucket, across both measurements.
+def _tag_values_with_data(tag, range_start, extra_filter=""):
+    """Tag values that actually have points, by counting rather than reading
+    the tag index.
 
-    Deliberately not derived from a config file: the authoritative answer to
-    "which homes exist" is which ones have logged data, and Node-RED writes
-    that tag on every point. A new tenant therefore shows up in the picker on
-    its own, with no deploy here. 90 days rather than unbounded because
-    tagValues scans the range it is given and an all-time scan gets slower
-    every month for an answer that never reaches back that far anyway."""
+    `schema.tagValues` would be the obvious call and is wrong here: it answers
+    from the series index, which retains values whose points have been deleted
+    until compaction eventually catches up. After the 2026-08-09 tenant rename
+    that meant deleted homes kept appearing in the picker, selectable, with
+    nothing behind them. Counting is a little more work for an answer that is
+    true now, and it is cached for a minute either way."""
     bucket = os.environ["INFLUX_BUCKET"]
     flux = (
-        'import "influxdata/influxdb/schema"\n'
-        f'schema.tagValues(bucket: "{bucket}", tag: "tenant", start: -90d)'
+        f'from(bucket: "{bucket}")\n'
+        f'  |> range(start: {range_start})\n'
+        f'{extra_filter}'
+        f'  |> group(columns: ["{tag}"])\n'
+        f'  |> count()\n'
+        f'  |> group()'
     )
-    ids = []
+    values = []
     for table in get_client().query_api().query(flux):
         for record in table.records:
-            value = record.get_value()
-            if value:
-                ids.append(value)
-    return ids
+            value = record.values.get(tag)
+            if value and record.get_value():
+                values.append(value)
+    return values
+
+
+def query_tenant_ids():
+    """Homes that have logged data.
+
+    Deliberately not derived from a config file: the authoritative answer to
+    "which homes exist" is which ones have data, so a new home shows up in the
+    picker on its own with no deploy here."""
+    return _tag_values_with_data("tenant", "-90d")
+
+
+def query_device_ids(tenant):
+    """Devices that have logged indoor data for one home.
+
+    Filtered to the indoor measurement because `device_id` only exists there --
+    the outside readings belong to the house, not to a sensor in it."""
+    return _tag_values_with_data(
+        "device_id", "-90d",
+        extra_filter=(f'  |> filter(fn: (r) => r._measurement == "{MEASUREMENT}"'
+                      f' and r.tenant == "{tenant}")\n'),
+    )
 
 
 def query_latest():

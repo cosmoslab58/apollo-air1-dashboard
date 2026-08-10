@@ -214,6 +214,119 @@ def test_device_controls_refuse_another_home(client, two_tenants, monkeypatch):
                        json={"state": True}).status_code == 200
 
 
+# ---------- devices within a home ----------
+
+@pytest.fixture
+def two_devices(monkeypatch, two_tenants):
+    """Own home with two sensors in it."""
+    own, other = two_tenants
+    monkeypatch.setattr(tenants, "known_devices",
+                        lambda tenant=None, force=False:
+                        (tenants.own_device(), "aqm_beta") if (tenant or own) == own else ("aqm_gamma",))
+    return own, other
+
+
+def test_own_device_is_the_second_topic_segment(monkeypatch):
+    monkeypatch.setenv("MQTT_TOPIC_PREFIX", "walnut/aqm_alpha")
+    assert tenants.own() == "walnut"
+    assert tenants.own_device() == "aqm_alpha"
+
+
+def test_device_scopes_the_indoor_query(two_devices):
+    tenants.set_current_device("aqm_beta")
+    flux = influx._flux(["co2_ppm"], "-1h", measurement=influx.MEASUREMENT)
+    assert 'r.device_id == "aqm_beta"' in flux
+
+
+def test_device_does_NOT_scope_outside_queries(two_devices):
+    # outside_air_quality carries no device_id -- the readings belong to the
+    # house. Filtering them by device matches nothing and blanks every outside
+    # panel, which looks exactly like an upstream outage.
+    tenants.set_current_device("aqm_beta")
+    flux = influx._flux(["aqi"], "-24h", measurement=influx.OUTSIDE_MEASUREMENT, sort=True)
+    assert "device_id" not in flux
+
+
+def test_all_devices_drops_the_device_filter(two_devices):
+    tenants.set_current_device(None)
+    assert "device_id" not in influx._flux(["co2_ppm"], "-1h", measurement=influx.MEASUREMENT)
+
+
+def test_empty_string_means_all_devices_not_fallback(two_devices):
+    own, _ = two_devices
+    tenants.set_current(own)
+    # "" is how the picker's All-devices option asks for the house-wide view;
+    # it must not be folded into "nothing was requested".
+    assert tenants.resolve_device("", None) is None
+    assert tenants.resolve_device(None, None) == tenants.own_device()
+
+
+def test_a_device_from_another_home_is_never_carried_across(two_devices):
+    own, other = two_devices
+    tenants.set_current(other)
+    # Showing our sensor's readings captioned with another house would be
+    # actively misleading. The other home has exactly one sensor, so the
+    # request resolves to THAT rather than widening to all devices -- a
+    # single-sensor house should show its sensor.
+    resolved = tenants.resolve_device(tenants.own_device(), None, tenant=other)
+    assert resolved != tenants.own_device()
+    assert resolved == "aqm_gamma"
+
+
+def test_an_unknown_device_falls_back_to_our_own_in_our_own_home(two_devices):
+    own, _ = two_devices
+    tenants.set_current(own)
+    # In our own house there IS an obvious default -- the sensor this container
+    # is wired to -- so a stale id lands there rather than widening.
+    assert tenants.resolve_device("aqm_nonexistent", None, tenant=own) == tenants.own_device()
+
+
+def test_ownership_is_not_gated_by_a_device_when_none_is_configured(monkeypatch):
+    # Regression: MQTT_TOPIC_PREFIX with no device segment (and CI, which has
+    # no .env at all) left own_device() empty, which made is_own() false for
+    # everything and turned unrelated 400s into 409s.
+    monkeypatch.setenv("MQTT_TOPIC_PREFIX", "somehome")
+    tenants.set_current("somehome")
+    tenants.set_current_device(None)
+    assert tenants.own_device() == ""
+    assert tenants.is_own() is True
+
+
+def test_controls_refuse_a_different_device_in_our_own_home(client, two_devices, monkeypatch):
+    own, _ = two_devices
+    monkeypatch.setattr(mqtt_bridge, "available", lambda: True)
+    monkeypatch.setattr(mqtt_bridge, "device_online", lambda: True)
+    published = []
+    monkeypatch.setattr(mqtt_bridge, "publish_switch", lambda o, s: published.append(o))
+
+    # Same house, different sensor: a command would still land on OUR device.
+    res = client.post(f"/api/control/switch/{mqtt_bridge.PREVENT_SLEEP}?device=aqm_beta",
+                      json={"state": True})
+    assert res.status_code == 409
+    assert published == []
+
+
+def test_device_picker_hidden_with_one_device(client, two_tenants, monkeypatch):
+    monkeypatch.setattr(tenants, "known_devices",
+                        lambda tenant=None, force=False: (tenants.own_device(),))
+    assert 'id="device-select"' not in client.get("/").data.decode()
+
+
+def test_device_picker_appears_with_two(client, two_devices):
+    page = client.get("/").data.decode()
+    assert 'id="device-select"' in page
+    assert "aqm_beta" in page
+    assert "All devices" in page
+
+
+def test_switching_home_does_not_carry_the_device_across(client, two_devices):
+    own, other = two_devices
+    res = client.post("/api/tenant", json={"tenant": other})
+    assert res.status_code == 200
+    # The other home has aqm_gamma, not our sensor.
+    assert res.get_json()["device"] in ("aqm_gamma", "")
+
+
 def test_changing_home_location_refuses_another_home(client, two_tenants):
     _, other = two_tenants
     # Would publish to this container's own retained config topic and move our

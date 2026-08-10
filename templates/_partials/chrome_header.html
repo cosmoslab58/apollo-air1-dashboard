@@ -54,6 +54,23 @@
     </select>
   </div>
   {% endif %}
+  {# Devices live inside a home, so this row follows the home row and is
+     rebuilt whenever the home changes. Hidden when the selected home has one
+     sensor -- which is the normal case and would otherwise be a picker with a
+     single entry plus a meaningless "All devices". #}
+  {% if device_choices|length > 1 %}
+  <div class="settings-row">
+    <span class="cl-name">Device</span>
+    <select class="tenant-select" id="device-select" aria-label="Which device to show">
+      {% for device_id, device_label, device_is_own in device_choices %}
+      <option value="{{ device_id }}"{% if device_id == current_device %} selected{% endif %}>{{ device_label }}{% if not device_is_own %} (read-only){% endif %}</option>
+      {% endfor %}
+      {# Outside readings belong to the house and are unaffected by this
+         choice, so an all-devices view is coherent rather than a gap. #}
+      <option value=""{% if not current_device %} selected{% endif %}>All devices</option>
+    </select>
+  </div>
+  {% endif %}
   <div class="settings-row">
     <span class="cl-name">Readout</span>
     <div class="settings-rail readout-toggle" role="tablist" aria-label="Pollutant readout">

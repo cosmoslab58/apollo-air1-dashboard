@@ -300,31 +300,52 @@ function positionPopover(panel, trigger) {
  * return; this file loads on every page. */
 (function initTenantPicker() {
   const tenantSelect = document.getElementById("tenant-select");
-  if (!tenantSelect) return;
+  const deviceSelect = document.getElementById("device-select");
+  if (!tenantSelect && !deviceSelect) return;
 
-  tenantSelect.addEventListener("change", async () => {
-    const chosen = tenantSelect.value;
-    const previous = tenantSelect.dataset.current || chosen;
-    tenantSelect.disabled = true;
+  async function switchTo(body, selects) {
+    selects.forEach((s) => { s.disabled = true; });
     try {
       const res = await fetch("/api/tenant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant: chosen }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       // The server decides what actually took effect -- an id it doesn't
-      // recognise falls back to this dashboard's own home rather than
-      // failing, so reloading on its answer keeps the page honest about
-      // which home it ended up showing.
+      // recognise falls back rather than failing, so reloading on its answer
+      // keeps the page honest about what it ended up showing.
       window.location.reload();
+      return true;
     } catch (err) {
-      console.error("Could not switch home", err);
-      tenantSelect.value = previous;
-      tenantSelect.disabled = false;
+      console.error("Could not switch view", err);
+      selects.forEach((s) => {
+        s.value = s.dataset.current || s.value;
+        s.disabled = false;
+      });
+      return false;
     }
-  });
-  tenantSelect.dataset.current = tenantSelect.value;
+  }
+
+  if (tenantSelect) {
+    // Deliberately sends no device: the new home has its own sensors, and the
+    // server picks that home's default rather than carrying a device across
+    // houses where it does not exist.
+    tenantSelect.addEventListener("change", () =>
+      switchTo({ tenant: tenantSelect.value }, [tenantSelect, deviceSelect].filter(Boolean)));
+    tenantSelect.dataset.current = tenantSelect.value;
+  }
+
+  if (deviceSelect) {
+    // Sends the home too, so the pair is always resolved together -- device
+    // ids are only unique within a house.
+    deviceSelect.addEventListener("change", () =>
+      switchTo({
+        tenant: tenantSelect ? tenantSelect.value : undefined,
+        device: deviceSelect.value,
+      }, [deviceSelect, tenantSelect].filter(Boolean)));
+    deviceSelect.dataset.current = deviceSelect.value;
+  }
 })();
 
 /* ---------- location mode: Home / Away (self-initializing on every page) ----------

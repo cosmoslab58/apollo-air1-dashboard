@@ -323,9 +323,21 @@ whole surface in one place.
   has data. The list comes from InfluxDB's `tenant` tag values, not config, so a
   newly provisioned home shows up on its own. `TENANT_LABELS` gives them
   readable names; without it the picker shows the raw tenant id.
-- **The tenant id** is the first segment of `MQTT_TOPIC_PREFIX` — the same
-  convention Node-RED uses when it takes the id off `+/air1/state`. One rule on
+- **The ids** are the two segments of `MQTT_TOPIC_PREFIX` — `<house>/<device>`,
+  the same convention Node-RED uses reading them off `+/+/state`. One rule on
   both sides is what stops the two disagreeing about who a reading belongs to.
+  Both moved together in the 2026-08-09 rename (`cosmoslab/air1` →
+  `walnut/aqm_alpha`), which is why neither is derived from the other.
+- **A second picker appears when a home has more than one sensor**, with an
+  "All devices" option. Device ids are only unique *within* a house, so devices
+  are always resolved against the selected home; switching home picks that
+  home's own sensor rather than carrying one across. Device scoping applies to
+  indoor readings only — outside readings belong to the house and carry no
+  `device_id`, so filtering them by device would blank every outside panel.
+- **Both lists are derived from data, not the tag index.** `schema.tagValues`
+  answers from the series index, which keeps values whose points were deleted
+  until compaction — after the rename that left deleted homes in the picker,
+  selectable and empty. They are counted instead.
 - **Selection** is a server-set cookie, overridable per-request with `?tenant=`
   so a link to one specific home is shareable. An id that isn't a real tenant
   falls back to this container's own home rather than erroring.

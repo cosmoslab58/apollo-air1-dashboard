@@ -40,12 +40,14 @@ import time
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 COOKIE = "tenant"
+DEVICE_COOKIE = "device"
 # A year: the picker is a "whose house am I looking at" preference, not
 # session state, and a wall display should survive a reboot still showing the
 # home it was set to.
 COOKIE_MAX_AGE_S = 365 * 24 * 3600
 
 _current = contextvars.ContextVar("current_tenant", default=None)
+_current_device = contextvars.ContextVar("current_device", default=None)
 
 # Discovery is a tag-values query against InfluxDB. Cached because otherwise
 # every page render pays for it just to draw the picker, and the answer only
@@ -76,10 +78,48 @@ def current():
     return _current.get() or own()
 
 
+def own_device():
+    """The device this container is wired to: second segment of the topic
+    prefix, matching how the ingestion flow reads it off `<house>/<device>/state`.
+
+    Note both halves moved together in the 2026-08-09 rename (cosmoslab/air1 ->
+    walnut/aqm_alpha), which is exactly why neither is derived from the other."""
+    parts = os.environ.get("MQTT_TOPIC_PREFIX", "").split("/")
+    return parts[1] if len(parts) > 1 else ""
+
+
+def set_current_device(device):
+    _current_device.set(device or None)
+
+
+def current_device():
+    """The device being viewed, or None for "every device in this home".
+
+    None is a real answer, not a missing one: the outside measurements have no
+    device at all, and a house-level view across two sensors is meaningful."""
+    return _current_device.get()
+
+
 def is_own(tenant=None):
-    """True when the viewed tenant is the one this container can actually
-    talk to. The gate for live state, device controls, and config publishes."""
-    return (tenant or current()) == own()
+    """True when the viewed home AND device are the ones this container can
+    actually talk to. The gate for live state, device controls, and config
+    publishes.
+
+    Device matters as much as home here: a command published to this
+    container's prefix reaches ITS sensor, so viewing a different device in the
+    same house must disable the controls just as firmly as viewing another
+    house would. current_device() of None means "all devices", which is also
+    not something a control can be aimed at."""
+    if (tenant or current()) != own():
+        return False
+    mine = own_device()
+    if not mine:
+        # No device segment configured at all (no MQTT_TOPIC_PREFIX, or a
+        # single-segment one). There is then no device dimension to disagree
+        # about, so it must not gate anything -- otherwise every ownership
+        # check fails closed and unrelated validation errors surface as 409s.
+        return True
+    return current_device() == mine
 
 
 def _labels():
@@ -154,4 +194,71 @@ def choices():
     return [
         (tenant, label(tenant), tenant == mine)
         for tenant in sorted(known(), key=lambda t: (t != mine, t))
+    ]
+
+
+# Devices are cached per tenant on the same short TTL and for the same reason
+# as the tenant list: it is a tag-values query and the answer only changes when
+# hardware is added.
+_device_cache = {}
+
+
+def known_devices(tenant=None, force=False):
+    """Device ids that have logged data for one home, plus own_device() when
+    that home is ours -- so a newly flashed sensor is selectable before it has
+    written anything.
+
+    Scoped to the tenant on purpose: device ids are only unique within a house
+    (two homes may each run an `aqm_alpha`), so a global device list would
+    offer a device that has no data under the selected home."""
+    tenant = tenant or current()
+    now = time.monotonic()
+    with _lock:
+        hit = _device_cache.get(tenant)
+        if hit and not force and now - hit[0] < _TTL_S:
+            return hit[1]
+
+    ids = set()
+    try:
+        import influx
+        ids = {i for i in influx.query_device_ids(tenant) if ID_RE.match(i)}
+    except Exception:
+        logging.exception("device discovery failed for tenant %s", tenant)
+
+    if tenant == own() and own_device():
+        ids.add(own_device())
+    result = tuple(sorted(ids))
+    with _lock:
+        _device_cache[tenant] = (now, result)
+    return result
+
+
+def resolve_device(requested, cookie_value, tenant=None):
+    """Pick the device for this request, or None for "all devices".
+
+    The empty string is a meaningful request -- it is how the picker's "All
+    devices" option asks for the house-wide view -- so it is distinguished from
+    absent rather than folded into the fallback. A device that is not in the
+    selected home falls back to all-devices instead of this container's own
+    sensor: silently showing our device's readings under another house's name
+    is the one answer that would be actively misleading."""
+    tenant = tenant or current()
+    devices = known_devices(tenant)
+    for candidate in (requested, cookie_value):
+        if candidate == "":
+            return None
+        if candidate and ID_RE.match(candidate) and candidate in devices:
+            return candidate
+    if tenant == own() and own_device() in devices:
+        return own_device()
+    return devices[0] if len(devices) == 1 else None
+
+
+def device_choices(tenant=None):
+    """(id, label, is_own) for the device picker, own device first."""
+    tenant = tenant or current()
+    mine = own_device() if tenant == own() else None
+    return [
+        (device, label(device), device == mine)
+        for device in sorted(known_devices(tenant), key=lambda d: (d != mine, d))
     ]

@@ -89,6 +89,11 @@ def _resolve_tenant():
     place a request can be assigned a home and no way for a handler to skip it."""
     tenants.set_current(tenants.resolve(
         request.args.get("tenant"), request.cookies.get(tenants.COOKIE)))
+    # Device is resolved second and against the tenant just chosen -- device
+    # ids are only unique within a house, so resolving them independently could
+    # pair a home with a sensor that does not live in it.
+    tenants.set_current_device(tenants.resolve_device(
+        request.args.get("device"), request.cookies.get(tenants.DEVICE_COOKIE)))
 
 
 def _wrong_tenant_response(what):
@@ -125,6 +130,11 @@ def inject_links():
         "current_tenant_label": tenants.label(tenants.current()),
         "own_tenant_label": tenants.label(tenants.own()),
         "viewing_own": tenants.is_own(),
+        "device_choices": tenants.device_choices(),
+        "current_device": tenants.current_device() or "",
+        "current_device_label": (tenants.label(tenants.current_device())
+                                 if tenants.current_device() else "All devices"),
+        "own_device_label": tenants.label(tenants.own_device()) if tenants.own_device() else "",
     }
 
 
@@ -140,10 +150,26 @@ def api_tenant_set():
     left believing it switched to something it didn't."""
     body = request.get_json(silent=True) or {}
     chosen = tenants.resolve(body.get("tenant"), None)
-    response = jsonify({"tenant": chosen, "label": tenants.label(chosen),
-                        "is_own": tenants.is_own(chosen)})
+    tenants.set_current(chosen)
+
+    # Device is resolved against the newly chosen home, not the old one. When
+    # the caller switches house without naming a device, `device` is absent
+    # (not empty string) and resolve_device falls back to that house's own
+    # sensor -- carrying the previous house's device across would either show
+    # nothing or, worse, silently widen to all-devices without saying so.
+    device = tenants.resolve_device(body.get("device"), None, tenant=chosen)
+    tenants.set_current_device(device)
+
+    response = jsonify({
+        "tenant": chosen, "label": tenants.label(chosen),
+        "device": device or "", "is_own": tenants.is_own(chosen),
+    })
     response.set_cookie(
         tenants.COOKIE, chosen,
+        max_age=tenants.COOKIE_MAX_AGE_S, samesite="Lax", httponly=True,
+    )
+    response.set_cookie(
+        tenants.DEVICE_COOKIE, device or "",
         max_age=tenants.COOKIE_MAX_AGE_S, samesite="Lax", httponly=True,
     )
     return response
