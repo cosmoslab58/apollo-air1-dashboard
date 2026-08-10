@@ -12,7 +12,12 @@
   <main class="view view-fade">
 
     <h1 class="zone-banner zone-banner--inside">
-      <span class="zone-dot"></span> Inside <span class="zone-sub">— bedroom sensor</span>
+      <span class="zone-dot"></span> Inside
+      {# Names the sensor actually on screen. This was hardcoded "bedroom sensor"
+         from July, which was wrong the moment the unit moved and actively
+         misleading once a house could hold more than one: it read as a device
+         name while the real device was called something else entirely. #}
+      <span class="zone-sub">— {% if current_device %}{{ current_device_label }} sensor{% else %}all sensors{% endif %}</span>
     </h1>
 
     <div class="section">
