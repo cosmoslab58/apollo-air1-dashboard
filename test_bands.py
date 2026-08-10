@@ -5,6 +5,11 @@ It serves what the device published, or the last thing the device published, or
 nothing -- and "nothing" has to stay a supported answer, because the alternative
 (a plausible built-in default) is exactly how the page and the LED drifted apart
 in the first place. mqtt_bridge.get_raw is monkeypatched; no broker is touched.
+
+These exercise the deviceless call (`get_table()`), which is the shared cache
+path; the per-device cache file it grew when one container started serving a
+whole house is covered in test_tenants.py alongside the routing that picks the
+device.
 """
 import importlib
 import json
@@ -30,14 +35,14 @@ def bd(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     import bands
     importlib.reload(bands)
-    monkeypatch.setattr(bands.mqtt_bridge, "get_raw", lambda suffix: None)
+    monkeypatch.setattr(bands.mqtt_bridge, "get_raw", lambda device, suffix: None)
     return bands
 
 
 def _serve(bd, monkeypatch, payload):
     """Pretend the retained topic currently holds `payload` (str or dict)."""
     raw = payload if isinstance(payload, str) else json.dumps(payload)
-    monkeypatch.setattr(bd.mqtt_bridge, "get_raw", lambda suffix: raw)
+    monkeypatch.setattr(bd.mqtt_bridge, "get_raw", lambda device, suffix: raw)
 
 
 def test_none_when_never_seen(bd):
@@ -57,7 +62,7 @@ def test_live_table_is_served_and_cached(bd, monkeypatch):
 def test_cache_is_used_when_broker_silent(bd, monkeypatch):
     _serve(bd, monkeypatch, GOOD)
     bd.get_table()
-    monkeypatch.setattr(bd.mqtt_bridge, "get_raw", lambda suffix: None)
+    monkeypatch.setattr(bd.mqtt_bridge, "get_raw", lambda device, suffix: None)
     assert bd.get_table() == GOOD
 
 

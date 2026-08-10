@@ -97,13 +97,26 @@ def _resolve_tenant():
 
 
 def _wrong_tenant_response(what):
-    """Shared 409 for the endpoints that only make sense for this container's
-    own home: live device state and anything that publishes to the broker.
+    """Shared 409 for the endpoints that need one specific device of ours:
+    live device state and anything that publishes to the broker.
 
     409 rather than 403 -- it isn't a permissions failure to be argued with,
-    it's that the request doesn't apply to what is being viewed. The message
-    names both homes because the likeliest way to hit this is forgetting the
-    picker is set to someone else's house."""
+    it's that the request doesn't apply to what is being viewed.
+
+    Two distinct causes, and the message has to tell them apart or it reads as
+    nonsense ("only available for Walnut — you're viewing Walnut"). Either the
+    picker is on another house, which nothing here can reach; or it is on our
+    own house with "All devices" selected, and a command cannot be aimed at
+    every sensor at once. The second is now the common one, and its fix (pick
+    a room) is nothing like the first's."""
+    if tenants.is_own_house():
+        return jsonify({
+            "error": f"{what} needs one device selected — "
+                     f"you're viewing all devices in {tenants.label(tenants.current())}",
+            "tenant": tenants.current(),
+            "own_tenant": tenants.own(),
+            "device": None,
+        }), 409
     return jsonify({
         "error": f"{what} is only available for {tenants.label(tenants.own())}, "
                  f"the home this dashboard is connected to — "
@@ -122,6 +135,11 @@ def inject_links():
     # tenant_*: which home is being viewed, and whether it's the one this
     # container can control -- the templates use viewing_own to decide whether
     # to render the device controls as live or as read-only.
+    # viewing_own_house is the weaker of the two and they are NOT
+    # interchangeable: "another house" (nothing here is live, and never can be)
+    # and "our house, all devices" (live, but no single sensor to aim at) want
+    # different words on screen. Collapsing them is how the header ends up
+    # captioning our own home "read-only".
     return {
         "grafana_url": os.environ.get("GRAFANA_DASHBOARD_URL", ""),
         "app_version": APP_VERSION,
@@ -130,6 +148,7 @@ def inject_links():
         "current_tenant_label": tenants.label(tenants.current()),
         "own_tenant_label": tenants.label(tenants.own()),
         "viewing_own": tenants.is_own(),
+        "viewing_own_house": tenants.is_own_house(),
         "device_choices": tenants.device_choices(),
         "current_device": tenants.current_device() or "",
         "current_device_label": (tenants.label(tenants.current_device())
@@ -256,10 +275,14 @@ def api_tick():
     # to its own timer exactly as it does during a broker outage. Saying null
     # is honest; reporting this container's own device would attach one home's
     # live band to another home's readings.
+    # ...and likewise for "All devices": there is no single sensor whose live
+    # band this could be, and picking one to speak for the house would colour
+    # the page from a room nobody selected.
     if not tenants.is_own():
         return jsonify({"seen_at": None, "air_band": None, "app_version": APP_VERSION})
 
-    raw = mqtt_bridge.get_raw("state")
+    device = tenants.control_device()
+    raw = mqtt_bridge.get_raw(device, "state")
     air_band = None
     if raw:
         try:
@@ -267,7 +290,7 @@ def api_tick():
         except ValueError:
             logging.warning("api_tick: retained state payload is not JSON")
     return jsonify({
-        "seen_at": mqtt_bridge.get_seen("state"),
+        "seen_at": mqtt_bridge.get_seen(device, "state"),
         "air_band": air_band,
         # For the stale-client reload check -- see APP_VERSION above. Rides on
         # this endpoint because it's the one thing every client already polls
@@ -291,9 +314,16 @@ def api_bands():
     # substituting a plausible-looking default -- the exact move this module
     # exists to refuse. Readings render uncoloured, which is the honest state.
     if not tenants.is_own():
+        if tenants.is_own_house():
+            # Our own house, but no one sensor in view. Each device publishes
+            # its own table and they need not agree (different firmware, or a
+            # retune rolled out to one room first), so there is no house-wide
+            # answer to give.
+            return jsonify({"error": "no band table for all devices — "
+                                     "each sensor publishes its own; pick one"}), 404
         return jsonify({"error": f"no band table for {tenants.label(tenants.current())} — "
-                                 f"this dashboard only receives one from its own device"}), 404
-    table = bands.get_table()
+                                 f"this dashboard only receives one from its own devices"}), 404
+    table = bands.get_table(tenants.control_device())
     if table is None:
         return jsonify({"error": "no band table received from the device yet"}), 404
     return jsonify(table)
@@ -709,9 +739,14 @@ def api_home_set():
     Influx series under the new location slug -- old data stays under the old
     one."""
     # Saving publishes to HOME_CONFIG_TOPIC, which is inside this container's
-    # own tenant root. Allowing it while another home is on screen would move
+    # own house root. Allowing it while another home is on screen would move
     # *our* polling location from a page captioned with someone else's name.
-    if not tenants.is_own():
+    #
+    # is_own_house, not is_own: a home location belongs to the HOUSE (it is
+    # where the outside readings are polled for, and outside_air_quality has no
+    # device_id at all), so which room happens to be selected -- or that "All
+    # devices" is -- has nothing to do with whether this save makes sense.
+    if not tenants.is_own_house():
         return _wrong_tenant_response("changing the home location")
     body = request.get_json(silent=True) or {}
     zip_code = (body.get("zip") or "").strip()
@@ -789,7 +824,7 @@ def api_away_clear():
 def api_controls():
     if not tenants.is_own():
         return _wrong_tenant_response("device control")
-    return jsonify(mqtt_bridge.get_state())
+    return jsonify(mqtt_bridge.get_state(tenants.control_device()))
 
 
 def _mqtt_unavailable_response():
@@ -807,15 +842,20 @@ def _mqtt_unavailable_response():
     is exactly what a WiFi/broker dropout looked like from the sofa. Refusing
     is the honest answer: nothing was sent, and nothing will be.
 
-    A third way, since the tenant picker: the command would land on this
-    container's own device while the viewer is looking at another home. The
-    check lives here so all four control routes inherit it -- they already
-    share this helper, which is why it was worth having."""
+    A third way, since the pickers: there is no single device of ours to aim
+    at -- another house (no broker grant, silently denied at QoS 0) or our own
+    house with "All devices" selected. The check lives here so all four
+    control routes inherit it -- they already share this helper, which is why
+    it was worth having.
+
+    Note device_online() is asked about the SELECTED device: rooms deep-sleep
+    on independent cycles, so "some sensor in the house is awake" is not an
+    answer to "will this command land"."""
     if not tenants.is_own():
         return _wrong_tenant_response("device control")
     if not mqtt_bridge.available():
         return jsonify({"error": "device control is unavailable — MQTT broker not connected"}), 503
-    if not mqtt_bridge.device_online():
+    if not mqtt_bridge.device_online(tenants.control_device()):
         return jsonify({"error": "the AIR-1 isn't connected right now — nothing was sent"}), 503
     return None
 
@@ -832,7 +872,7 @@ def api_control_switch(object_id):
     unavailable = _mqtt_unavailable_response()
     if unavailable:
         return unavailable
-    mqtt_bridge.publish_switch(object_id, body["state"])
+    mqtt_bridge.publish_switch(tenants.control_device(), object_id, body["state"])
     return jsonify({"published": True})
 
 
@@ -851,7 +891,7 @@ def api_control_number(object_id):
     unavailable = _mqtt_unavailable_response()
     if unavailable:
         return unavailable
-    mqtt_bridge.publish_number(object_id, value)
+    mqtt_bridge.publish_number(tenants.control_device(), object_id, value)
     return jsonify({"published": True})
 
 
@@ -867,7 +907,7 @@ def api_control_select(object_id):
     unavailable = _mqtt_unavailable_response()
     if unavailable:
         return unavailable
-    mqtt_bridge.publish_select(object_id, option)
+    mqtt_bridge.publish_select(tenants.control_device(), object_id, option)
     return jsonify({"published": True})
 
 
@@ -878,7 +918,7 @@ def api_control_button(object_id):
     unavailable = _mqtt_unavailable_response()
     if unavailable:
         return unavailable
-    mqtt_bridge.publish_button(object_id)
+    mqtt_bridge.publish_button(tenants.control_device(), object_id)
     return jsonify({"published": True})
 
 

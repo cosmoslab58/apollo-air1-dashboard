@@ -1,13 +1,19 @@
-"""Which home the dashboard is showing.
+"""Which home -- and which sensor in it -- the dashboard is showing.
 
-This container is *wired* to exactly one tenant. `MQTT_TOPIC_PREFIX` pins the
-broker tree it subscribes to and publishes controls on, and the broker ACL
-enforces that from the other side -- a prefix outside the grant is silently
-denied at QoS 0 (see the README's broker section). So switching tenants here
-switches what is **read back from InfluxDB**: indoor history and every outside
-provider, all of which Node-RED polls in and tags with `tenant`. It does not,
-and cannot, move live device state or the control endpoints; those stay pinned
-to `own()`.
+This container is *wired* to exactly one HOUSE. `MQTT_HOUSE_PREFIX` pins the
+broker tree it subscribes to and publishes controls on (`<house>/#`), and the
+broker ACL enforces that from the other side -- a topic outside the grant is
+silently denied at QoS 0 (see the README's broker section). So switching
+tenants here switches what is **read back from InfluxDB**: indoor history and
+every outside provider, all of which Node-RED polls in and tags with `tenant`.
+It does not, and cannot, move live device state or the control endpoints; those
+stay inside `own()`.
+
+The house, not the device, is the unit of wiring. It used to be the device --
+`MQTT_TOPIC_PREFIX=<house>/<device>` pinned the container to one sensor, so a
+second room meant a second container. Rooms are the identity now and a house
+has several of them, so live state and controls follow the SELECTED device
+anywhere inside our own house, and only a different house is out of reach.
 
 That split is the whole design. Everything this app renders is a DB read
 already -- even "current conditions" for the four outside providers, which
@@ -58,12 +64,23 @@ _cache = {"at": 0.0, "ids": ()}
 
 
 def own():
-    """The tenant this container is wired to.
+    """The house this container is wired to, and the tenant id of its data.
 
-    First segment of the MQTT topic prefix -- the same convention Node-RED
-    uses when it takes the tenant id off `+/air1/state`. Keeping one rule for
-    "what is a tenant id" across both sides is what stops the dashboard and
-    the ingestion flow from disagreeing about who a reading belongs to."""
+    `MQTT_HOUSE_PREFIX` is the modern setting and is ONE topic segment: the
+    same convention Node-RED uses when it takes the tenant id off
+    `+/+/state` as `parts[0]`. Keeping one rule for "what is a tenant id"
+    across both sides is what stops the dashboard and the ingestion flow from
+    disagreeing about who a reading belongs to.
+
+    Falls back to the first segment of the older `MQTT_TOPIC_PREFIX`
+    (`<house>/<device>`) so a deployment whose env has not been updated yet
+    keeps working unchanged -- the house was always its first segment, this
+    just stops caring about the second. mqtt_bridge derives its subscription
+    from this same function rather than re-reading the env, so the two can
+    never disagree about which tree we are on."""
+    house = os.environ.get("MQTT_HOUSE_PREFIX", "").strip("/")
+    if house:
+        return house.split("/")[0]
     return os.environ.get("MQTT_TOPIC_PREFIX", "").split("/")[0]
 
 
@@ -79,11 +96,24 @@ def current():
 
 
 def own_device():
-    """The device this container is wired to: second segment of the topic
-    prefix, matching how the ingestion flow reads it off `<house>/<device>/state`.
+    """This container's DEFAULT device, or "" when it has no opinion.
 
-    Note both halves moved together in the 2026-08-09 rename (cosmoslab/air1 ->
-    walnut/aqm_alpha), which is exactly why neither is derived from the other."""
+    No longer a limit -- controls reach any device in our own house now. It is
+    only (a) which sensor a fresh visitor lands on, and (b) the one entry
+    known_devices() can offer while InfluxDB is unreachable or has not logged
+    the device yet. That second job is why it still matters: without it, an
+    InfluxDB outage would empty the device list, leave nothing selected, and
+    take the *broker* controls down with the *database*, which are supposed to
+    be independent failure domains.
+
+    `MQTT_DEVICE` is the modern setting; the second segment of the older
+    `MQTT_TOPIC_PREFIX` (`<house>/<device>`) is honoured for back-compat, which
+    is what makes an un-updated env behave exactly as it did before. Empty is a
+    perfectly good answer for a house whose sensors are all discovered from
+    data."""
+    device = os.environ.get("MQTT_DEVICE", "").strip("/")
+    if device:
+        return device
     parts = os.environ.get("MQTT_TOPIC_PREFIX", "").split("/")
     return parts[1] if len(parts) > 1 else ""
 
@@ -101,25 +131,44 @@ def current_device():
 
 
 def is_own(tenant=None):
-    """True when the viewed home AND device are the ones this container can
-    actually talk to. The gate for live state, device controls, and config
-    publishes.
+    """True when the viewed home is the one this container is wired to AND a
+    single device is in view. The gate for live state and device controls.
 
-    Device matters as much as home here: a command published to this
-    container's prefix reaches ITS sensor, so viewing a different device in the
-    same house must disable the controls just as firmly as viewing another
-    house would. current_device() of None means "all devices", which is also
-    not something a control can be aimed at."""
-    if (tenant or current()) != own():
-        return False
-    mine = own_device()
-    if not mine:
-        # No device segment configured at all (no MQTT_TOPIC_PREFIX, or a
-        # single-segment one). There is then no device dimension to disagree
-        # about, so it must not gate anything -- otherwise every ownership
-        # check fails closed and unrelated validation errors surface as 409s.
-        return True
-    return current_device() == mine
+    Two separate refusals, for two different reasons:
+
+    - Another HOUSE: we hold no broker grant there. A command published to it
+      is silently denied at QoS 0 and its device never reports state to us, so
+      there is nothing honest to show or send.
+    - "All devices" (current_device() is None): our own house, but a command
+      cannot be aimed at every sensor at once, and one sensor's live band is
+      not the house's. Refusing is the only truthful answer; the fix is to
+      pick a room in the device picker.
+
+    A DIFFERENT device in our own house is emphatically fine now -- that is the
+    whole point of house scoping. is_own_house() below is the weaker check for
+    things that genuinely belong to the house rather than to a sensor."""
+    return is_own_house(tenant) and current_device() is not None
+
+
+def is_own_house(tenant=None):
+    """True when the viewed home is ours, whichever device is selected.
+
+    The gate for house-level writes -- the home location, which is one place
+    for every sensor in it (see home_config.CONFIG_TOPIC) and is meaningful
+    even while the view is "all devices"."""
+    return (tenant or current()) == own()
+
+
+def control_device():
+    """The device live state and control publishes act on, or None.
+
+    Exactly the selected device: there is deliberately no fall back to
+    own_device() here. With a device dimension in play, quietly substituting
+    the default sensor for the one on screen is how a command aimed at the
+    bedroom lands in the living room -- and at QoS 0 nothing would ever say
+    so. None means "refuse", and is_own() is the check that turns it into a
+    409 before any topic gets built."""
+    return current_device()
 
 
 def _labels():
@@ -255,10 +304,18 @@ def resolve_device(requested, cookie_value, tenant=None):
 
 
 def device_choices(tenant=None):
-    """(id, label, is_own) for the device picker, own device first."""
+    """(id, label, controllable) for the device picker, default device first.
+
+    `controllable` is a property of the HOUSE, not of the individual sensor:
+    every device in our own house can be controlled from here, so the picker
+    must not mark all but one of them "(read-only)" the way it did while this
+    container was pinned to a single sensor. Ordering still floats
+    own_device() to the top -- it is the one a fresh visitor lands on, so it
+    belongs where they look first."""
     tenant = tenant or current()
     mine = own_device() if tenant == own() else None
+    controllable = tenant == own()
     return [
-        (device, label(device), device == mine)
+        (device, label(device), controllable)
         for device in sorted(known_devices(tenant), key=lambda d: (d != mine, d))
     ]

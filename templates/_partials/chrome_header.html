@@ -2,10 +2,14 @@
   <div class="faceplate-inner">
     <div class="device-id">
       <span class="device-name">CosmosLab<br>Air Quality App</span>
-      {% if not viewing_own %}
-      {# Only when looking at someone else's house. Persistent rather than a
-         dismissible toast: every reading on the page belongs to another home,
-         and that has to stay visible for as long as it's true. #}
+      {% if not viewing_own_house %}
+      {# Only when looking at someone else's house -- deliberately NOT the
+         stricter viewing_own, which is also false for our own house with "All
+         devices" selected. That is not read-only data, it is every room of
+         ours at once, and badging it "read-only" would be a lie about whose
+         readings these are. Persistent rather than a dismissible toast: every
+         reading on the page belongs to another home, and that has to stay
+         visible for as long as it's true. #}
       <span class="tenant-badge" title="Showing logged data for {{ current_tenant_label }}. Live readings and device controls stay with {{ own_tenant_label }}, the home this dashboard is connected to.">{{ current_tenant_label }} · read-only</span>
       {% endif %}
     </div>

@@ -1,3 +1,17 @@
+"""The live broker link: one subscription covering the whole HOUSE.
+
+This bridge used to be pinned to a single device (`MQTT_TOPIC_PREFIX` =
+`<house>/<device>`), which meant one container per sensor. It now subscribes to
+`<house>/#` and keys everything it hears by (device, suffix), so one container
+serves every room in the house -- live state and controls for all of them.
+
+Every accessor and publish helper therefore takes an explicit `device`. That is
+deliberately not optional and has no default: at QoS 0 a command published to
+the wrong device topic is indistinguishable from success from this side, so
+"which sensor" must be a decision the caller has already made (see
+tenants.control_device), never one this module quietly makes for it.
+"""
+
 import json
 import logging
 import os
@@ -5,6 +19,8 @@ import threading
 import time
 
 import paho.mqtt.client as mqtt
+
+import tenants
 
 logger = logging.getLogger(__name__)
 
@@ -52,19 +68,36 @@ ESP_REBOOT = "esp_reboot"
 # confirm it actually responds over MQTT before wiring a UI control to it.
 FACTORY_RESET = "factory_reset_esp"
 
+# Everything heard under the house, keyed by (device, suffix) -- e.g.
+# ("living_room", "switch/prevent_sleep/state"). A flat {suffix: ...} dict was
+# fine while one container watched one sensor; with the whole house on one
+# subscription it would have two rooms overwriting each other's `state` and
+# `status`, silently reporting whichever published last as both.
 _state = {}
 _lock = threading.Lock()
 _client = None
 
 
-def _topic_prefix():
-    return os.environ["MQTT_TOPIC_PREFIX"]
+def _house_prefix():
+    """The topic root this container is wired to: one segment, no slash.
+
+    Read through tenants.own() rather than from the env directly so there is
+    exactly one rule for "which house are we" -- the ownership checks that
+    decide whether a control is allowed and the subscription that decides
+    whether its state ever arrives must agree, and deriving them separately is
+    how they drift."""
+    return tenants.own()
 
 
 def _on_connect(client, userdata, flags, reason_code, properties):
-    prefix = _topic_prefix()
-    client.subscribe(f"{prefix}/#")
-    logger.info("mqtt_bridge: connected to broker, subscribed to %s/#", prefix)
+    house = _house_prefix()
+    if not house:
+        # Subscribing to "#" here would pull in every tenant on the broker (and
+        # be denied by the ACL anyway). Loud, and no subscription.
+        logger.error("mqtt_bridge: no MQTT_HOUSE_PREFIX/MQTT_TOPIC_PREFIX set; not subscribing")
+        return
+    client.subscribe(f"{house}/#")
+    logger.info("mqtt_bridge: connected to broker, subscribed to %s/#", house)
 
 
 def _on_disconnect(client, userdata, flags, reason_code, properties):
@@ -72,14 +105,26 @@ def _on_disconnect(client, userdata, flags, reason_code, properties):
 
 
 def _on_message(client, userdata, msg):
-    prefix = _topic_prefix() + "/"
+    house = _house_prefix()
+    if not house:
+        return
+    prefix = house + "/"
     if not msg.topic.startswith(prefix):
         return
-    suffix = msg.topic[len(prefix):]
+    # `<house>/<device>/<suffix...>` -- the same split Node-RED does on the
+    # ingest side (tenant = parts[0], device = parts[-2]). partition rather
+    # than split(maxsplit) because the suffix keeps its own slashes:
+    # "switch/prevent_sleep/state" is one key, not three.
+    device, _, suffix = msg.topic[len(prefix):].partition("/")
+    if not device or not suffix:
+        # A house-level topic with nothing under it. Nothing reads those, and
+        # storing them under a device that doesn't exist would put junk in the
+        # picker's way if it ever learned devices from here.
+        return
     payload = msg.payload.decode("utf-8", errors="replace")
     with _lock:
-        _state[suffix] = {"value": payload, "seen_at": time.time()}
-    logger.debug("mqtt_bridge: %s = %r", suffix, payload)
+        _state[(device, suffix)] = {"value": payload, "seen_at": time.time()}
+    logger.debug("mqtt_bridge: %s/%s = %r", device, suffix, payload)
 
 
 def start():
@@ -131,33 +176,36 @@ def available():
         return False
 
 
-def device_online():
-    """True when the AIR-1 itself is on the broker, per its birth/LWT status.
+def device_online(device):
+    """True when that device is on the broker, per its birth/LWT status.
 
     Distinct from available() above, which only says the *app* can reach the
     broker. Controls need both: a command is published QoS 0 and non-retained
     to a topic only the device subscribes to, so one sent while it is
     disconnected is dropped there and then -- the broker does not hold it for
-    the device's return, and nothing ever replays it."""
+    the device's return, and nothing ever replays it.
+
+    Per device, because in a multi-room house one sensor being awake says
+    nothing about another: they deep-sleep on independent cycles."""
     with _lock:
-        return _state.get("status", {}).get("value") == "online"
+        return _state.get((device, "status"), {}).get("value") == "online"
 
 
-def get_raw(suffix):
-    """Raw payload last seen on one topic suffix under the prefix, or None.
+def get_raw(device, suffix):
+    """Raw payload last seen on one device's topic suffix, or None.
 
-    _on_message already caches every topic under `<prefix>/#`, so reading a
-    topic the *device* publishes -- rather than one of the control entities
+    _on_message already caches every topic under `<house>/#`, so reading a
+    topic a *device* publishes -- rather than one of the control entities
     get_state() knows about -- needs no new subscription, just this accessor.
     Used by bands.py for the retained `config/bands` table.
     """
     with _lock:
-        entry = _state.get(suffix)
+        entry = _state.get((device, suffix))
     return entry["value"] if entry else None
 
 
-def get_seen(suffix):
-    """When we last received anything on one topic suffix, or None.
+def get_seen(device, suffix):
+    """When we last received anything on one device's topic suffix, or None.
 
     Deliberately the RECEIVE time rather than any timestamp inside the payload:
     /api/tick uses it purely as a change token, and the device's own snapshots
@@ -165,7 +213,7 @@ def get_seen(suffix):
     change-detector needs.
     """
     with _lock:
-        entry = _state.get(suffix)
+        entry = _state.get((device, suffix))
     return entry["seen_at"] if entry else None
 
 
@@ -222,9 +270,19 @@ def _led_ramp_readback(snapshot):
     return {"led_brightness_effective": effective, "sun_elevation_deg": elevation}
 
 
-def get_state():
+def _snapshot(device):
+    """One device's slice of the cache, re-keyed by bare suffix.
+
+    Everything below (_val, _seen, _led_ramp_readback) parses a single
+    device's view of the world, so the device dimension is peeled off once
+    here rather than threaded through every lookup -- which also keeps those
+    parsers unit-testable against a plain {suffix: entry} dict."""
     with _lock:
-        snapshot = dict(_state)
+        return {suffix: entry for (dev, suffix), entry in _state.items() if dev == device}
+
+
+def get_state(device):
+    snapshot = _snapshot(device)
 
     return {
         "online": _val(snapshot, "status") == "online",
@@ -265,25 +323,34 @@ def get_state():
     }
 
 
-def publish_switch(object_id, on):
-    _client.publish(f"{_topic_prefix()}/switch/{object_id}/command", "ON" if on else "OFF")
+def _command_topic(device, kind, object_id):
+    """`<house>/<device>/<kind>/<object_id>/command`.
+
+    One builder for all four publish helpers so the device segment cannot be
+    left out of one of them -- the resulting topic would still look plausible
+    (`walnut/switch/...`), be denied by the ACL at QoS 0, and report success."""
+    return f"{_house_prefix()}/{device}/{kind}/{object_id}/command"
 
 
-def publish_number(object_id, value):
-    _client.publish(f"{_topic_prefix()}/number/{object_id}/command", str(value))
+def publish_switch(device, object_id, on):
+    _client.publish(_command_topic(device, "switch", object_id), "ON" if on else "OFF")
 
 
-def publish_select(object_id, option):
+def publish_number(device, object_id, value):
+    _client.publish(_command_topic(device, "number", object_id), str(value))
+
+
+def publish_select(device, object_id, option):
     """Set a select entity. ESPHome matches the option by exact string, so the
     value published here has to be one the device's list actually contains — an
     unknown option is logged on the device and otherwise ignored, which from
     here is indistinguishable from success. app.py validates against
     LED_AMBIENCE_OPTIONS before calling."""
-    _client.publish(f"{_topic_prefix()}/select/{object_id}/command", option)
+    _client.publish(_command_topic(device, "select", object_id), option)
 
 
-def publish_button(object_id):
-    _client.publish(f"{_topic_prefix()}/button/{object_id}/command", "PRESS")
+def publish_button(device, object_id):
+    _client.publish(_command_topic(device, "button", object_id), "PRESS")
 
 
 def publish_config(topic, payload, retain=True):

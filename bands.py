@@ -27,6 +27,7 @@ both, with no risk of fixing one and forgetting the other.
 import json
 import logging
 import os
+import re
 import threading
 
 import mqtt_bridge
@@ -36,11 +37,17 @@ logger = logging.getLogger(__name__)
 DATA_DIR = os.environ.get("DATA_DIR", "data")
 BANDS_FILE = os.path.join(DATA_DIR, "bands.json")
 
-# Suffix under MQTT_TOPIC_PREFIX that the firmware publishes the table to,
-# retained. mqtt_bridge already subscribes to the whole prefix tree, so nothing
+# Suffix under `<house>/<device>/` that the firmware publishes the table to,
+# retained. mqtt_bridge already subscribes to the whole house tree, so nothing
 # has to be wired up for this to arrive -- it lands in the bridge's state cache
 # like any other topic.
 BANDS_SUFFIX = "config/bands"
+
+# The cache filename is built from a device id that arrives from a cookie or a
+# query string, so it is matched against the same slug shape tenants.ID_RE
+# enforces before it can become a path. Anything else gets no disk cache at all
+# rather than a sanitised guess -- see _bands_file.
+_DEVICE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 _write_lock = threading.Lock()
 
@@ -76,29 +83,57 @@ def _valid(table):
     return True
 
 
-def _load_cached():
-    if not os.path.exists(BANDS_FILE):
+def _bands_file(device=None):
+    """Where one device's last-known table is cached, or None for no cache.
+
+    Per device now that one container serves a whole house: two sensors can be
+    on different firmware, and serving the living room's cached cuts under the
+    bedroom's readings would be precisely the invented-default this module
+    exists to refuse. `None` keeps the historical shared path, which is what
+    the deviceless callers (and these tests) use.
+
+    An id that isn't a plain slug gets no cache rather than a sanitised
+    filename: the value reaches the filesystem, and a hand-edited `?device=`
+    must not be able to steer it."""
+    if device is None:
+        return BANDS_FILE
+    if not _DEVICE_RE.match(device):
+        return None
+    return os.path.join(DATA_DIR, f"bands-{device}.json")
+
+
+def _load_cached(device=None):
+    path = _bands_file(device)
+    if path is None or not os.path.exists(path):
         return None
     try:
-        with open(BANDS_FILE) as f:
+        with open(path) as f:
             table = json.load(f)
     except (OSError, ValueError):
-        logger.warning("bands: cached table at %s is unreadable, ignoring", BANDS_FILE)
+        logger.warning("bands: cached table at %s is unreadable, ignoring", path)
         return None
     return table if _valid(table) else None
 
 
-def _save_cached(table):
+def _save_cached(table, device=None):
+    path = _bands_file(device)
+    if path is None:
+        return
     with _write_lock:
         os.makedirs(DATA_DIR, exist_ok=True)
-        tmp = BANDS_FILE + ".tmp"
+        tmp = path + ".tmp"
         with open(tmp, "w") as f:
             json.dump(table, f, indent=2)
-        os.replace(tmp, BANDS_FILE)
+        os.replace(tmp, path)
 
 
-def get_table():
-    """The current band table, or None if this app has never seen one.
+def get_table(device=None):
+    """One device's current band table, or None if this app has never seen one.
+
+    Per device: the table is published by a specific sensor, so asking for it
+    without naming one (the "all devices" view) has no answer -- /api/bands
+    refuses that case rather than picking a sensor's table to speak for the
+    house.
 
     Live MQTT wins; the disk cache is the fallback. That ordering matters after
     a firmware change: the retained topic carries the new table, and we must not
@@ -113,7 +148,7 @@ def get_table():
     reading than a colour this app invented, since inventing one is how the page
     and the LED drifted apart in the first place.
     """
-    raw = mqtt_bridge.get_raw(BANDS_SUFFIX)
+    raw = mqtt_bridge.get_raw(device, BANDS_SUFFIX)
     if raw:
         try:
             table = json.loads(raw)
@@ -122,11 +157,11 @@ def get_table():
             table = None
         if table is not None:
             if _valid(table):
-                if table != _load_cached():
+                if table != _load_cached(device):
                     try:
-                        _save_cached(table)
+                        _save_cached(table, device)
                     except OSError:
                         logger.exception("bands: could not persist table (serving it anyway)")
                 return table
             logger.warning("bands: retained payload failed validation, falling back to cache")
-    return _load_cached()
+    return _load_cached(device)

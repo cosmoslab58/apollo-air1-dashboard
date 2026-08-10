@@ -8,9 +8,12 @@ its own sun arithmetic and eventually disagreeing with the light on the wall.
 That disagreement is the specific failure this dashboard is built to avoid (see
 the band-table plumbing in bands.py for the same argument about colours).
 
-No broker is touched: the parser is fed a snapshot dict directly.
+No broker is touched: the parser is fed a snapshot dict directly, and the
+cache tests below hand messages straight to the on_message callback.
 """
 import json
+
+import pytest
 
 import mqtt_bridge
 
@@ -94,3 +97,77 @@ def test_wrong_types_degrade_to_unknown():
         "sun_elevation_deg": "dusk",
     }))
     assert out == {"led_brightness_effective": None, "sun_elevation_deg": None}
+
+
+# ---------- one subscription, a whole house ----------
+#
+# The bridge subscribes to `<house>/#` and keys everything it hears by
+# (device, suffix). The failure these guard against is silent: with the old
+# flat {suffix: ...} cache two rooms overwrite each other's `state` and
+# `status`, so the dashboard reports whichever published last as both -- no
+# error, no gap, just the wrong room's numbers under the right room's name.
+
+
+class _Msg:
+    """The two attributes paho's on_message callback actually reads."""
+
+    def __init__(self, topic, payload):
+        self.topic = topic
+        self.payload = payload.encode()
+
+
+@pytest.fixture
+def house(monkeypatch):
+    monkeypatch.setenv("MQTT_HOUSE_PREFIX", "walnut")
+    monkeypatch.delenv("MQTT_TOPIC_PREFIX", raising=False)
+    monkeypatch.delenv("MQTT_DEVICE", raising=False)
+    monkeypatch.setattr(mqtt_bridge, "_state", {})
+    return "walnut"
+
+
+def _deliver(topic, payload):
+    mqtt_bridge._on_message(None, None, _Msg(topic, payload))
+
+
+def test_two_rooms_do_not_overwrite_each_other(house):
+    _deliver("walnut/living_room/state", '{"air_band": 1}')
+    _deliver("walnut/bedroom/state", '{"air_band": 4}')
+    assert mqtt_bridge.get_raw("living_room", "state") == '{"air_band": 1}'
+    assert mqtt_bridge.get_raw("bedroom", "state") == '{"air_band": 4}'
+    # An unheard-of room is None, not the last thing anyone said.
+    assert mqtt_bridge.get_raw("kitchen", "state") is None
+    assert mqtt_bridge.get_seen("kitchen", "state") is None
+
+
+def test_online_is_per_device(house):
+    """Rooms deep-sleep on independent cycles, so one being on the broker says
+    nothing about another -- and this gates whether a command is sent at all."""
+    _deliver("walnut/living_room/status", "online")
+    _deliver("walnut/bedroom/status", "offline")
+    assert mqtt_bridge.device_online("living_room") is True
+    assert mqtt_bridge.device_online("bedroom") is False
+    assert mqtt_bridge.device_online("kitchen") is False
+
+
+def test_multi_segment_suffixes_stay_whole(house):
+    """`switch/prevent_sleep/state` is one key. Splitting on every slash would
+    scatter each control entity across three levels of nothing."""
+    _deliver("walnut/bedroom/switch/prevent_sleep/state", "ON")
+    assert mqtt_bridge.get_state("bedroom")["prevent_sleep"] is True
+    # ...and belongs to that room alone.
+    assert mqtt_bridge.get_state("living_room")["prevent_sleep"] is False
+
+
+def test_topics_outside_the_house_are_ignored(house):
+    # The ACL should stop these ever arriving, but a wildcard subscription is
+    # exactly the place not to trust that.
+    _deliver("maple/living_room/state", '{"air_band": 5}')
+    _deliver("walnut", "bare")
+    _deliver("walnut/orphan", "no suffix")
+    assert mqtt_bridge._state == {}
+
+
+def test_command_topics_name_the_device(house):
+    assert mqtt_bridge._command_topic("bedroom", "switch", "prevent_sleep") == (
+        "walnut/bedroom/switch/prevent_sleep/command"
+    )

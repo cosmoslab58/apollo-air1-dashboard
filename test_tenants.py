@@ -1,18 +1,27 @@
-"""Tenant selection: resolution rules, the InfluxDB filter, and the boundary
-between what a second home can show and what stays pinned to this container.
+"""Tenant and device selection: resolution rules, the InfluxDB filter, and the
+boundary between what a second home can show and what this container can act on.
 
 The live deployment only has one tenant, so every multi-tenant test here fakes
 a second one by patching tenants.known() -- which is also the seam a real
 second home would arrive through, since the list comes from InfluxDB tag
-values rather than config."""
+values rather than config.
+
+The boundary moved when the container stopped being wired to a single sensor:
+it is the HOUSE now, not the device. Live state and controls follow whichever
+device is selected inside our own house; only another house, or "All devices"
+(nothing to aim a command at), is refused. The tests below are written to fail
+if either half of that regresses -- a control silently reaching the default
+sensor instead of the selected one is invisible at QoS 0."""
 import json
 
 import pytest
 
 import app as app_module
 import bands
+import home_config
 import influx
 import mqtt_bridge
+import purpleair
 import tenants
 
 OTHER = "maple"
@@ -26,16 +35,25 @@ def client():
 
 @pytest.fixture(autouse=True)
 def _hermetic_env(monkeypatch):
-    """Pin the two settings these tests read, rather than inheriting a local
-    .env. CI has no .env, so anything depending on one passes only on a
-    developer's machine -- which is exactly how this file first went green
-    locally and red on the runner. Also clears the per-request tenant
-    afterwards so a value leaked from one test can't decide another's."""
+    """Pin the settings these tests read, rather than inheriting a local .env.
+    CI has no .env, so anything depending on one passes only on a developer's
+    machine -- which is exactly how this file first went green locally and red
+    on the runner. Also clears the per-request tenant and device afterwards so
+    a value leaked from one test can't decide another's.
+
+    Deliberately the LEGACY `MQTT_TOPIC_PREFIX` form: the deployed env still
+    carries it, so the whole file doubles as the back-compat suite for deriving
+    the house from `<house>/<device>`. The house-prefix settings are cleared
+    rather than left alone, or a .env that has moved on would silently take
+    over and this file would be testing a different house than it says."""
     monkeypatch.setenv("MQTT_TOPIC_PREFIX", "cosmoslab/air1")
+    monkeypatch.delenv("MQTT_HOUSE_PREFIX", raising=False)
+    monkeypatch.delenv("MQTT_DEVICE", raising=False)
     monkeypatch.setenv("INFLUX_BUCKET", "air_quality")
     monkeypatch.delenv("TENANT_LABELS", raising=False)
     yield
     tenants.set_current(None)
+    tenants.set_current_device(None)
 
 
 @pytest.fixture
@@ -75,6 +93,33 @@ def test_query_arg_beats_cookie_beats_own(two_tenants):
 def test_own_tenant_is_the_first_topic_segment(monkeypatch):
     monkeypatch.setenv("MQTT_TOPIC_PREFIX", "somehome/air1")
     assert tenants.own() == "somehome"
+
+
+def test_the_house_prefix_is_the_modern_setting(monkeypatch):
+    # What the env moves to once a house has more than one room: the container
+    # is wired to the house, and no device is named at all.
+    monkeypatch.delenv("MQTT_TOPIC_PREFIX", raising=False)
+    monkeypatch.setenv("MQTT_HOUSE_PREFIX", "walnut")
+    assert tenants.own() == "walnut"
+    assert tenants.own_device() == ""
+
+
+def test_the_house_prefix_wins_over_the_legacy_pair(monkeypatch):
+    # Both set is the state of a half-migrated env. The new setting has to win,
+    # or updating it would appear to do nothing.
+    monkeypatch.setenv("MQTT_TOPIC_PREFIX", "oldhouse/oldsensor")
+    monkeypatch.setenv("MQTT_HOUSE_PREFIX", "walnut")
+    monkeypatch.setenv("MQTT_DEVICE", "living_room")
+    assert tenants.own() == "walnut"
+    assert tenants.own_device() == "living_room"
+
+
+def test_a_house_is_one_segment(monkeypatch):
+    # Node-RED reads the tenant as parts[0] of the topic. A prefix with a slash
+    # in it would put the dashboard on a different tenant id than the ingestion
+    # flow tags the data with, and the two would never meet.
+    monkeypatch.setenv("MQTT_HOUSE_PREFIX", "walnut/living_room")
+    assert tenants.own() == "walnut"
 
 
 def test_choices_put_the_controllable_home_first(two_tenants):
@@ -176,8 +221,8 @@ def test_viewing_another_home_is_marked_read_only(client, two_tenants):
 
 def test_live_tick_reports_no_information_for_another_home(client, two_tenants, monkeypatch):
     _, other = two_tenants
-    monkeypatch.setattr(mqtt_bridge, "get_raw", lambda _t: json.dumps({"air_band": 4}))
-    monkeypatch.setattr(mqtt_bridge, "get_seen", lambda _t: 12345)
+    monkeypatch.setattr(mqtt_bridge, "get_raw", lambda _d, _t: json.dumps({"air_band": 4}))
+    monkeypatch.setattr(mqtt_bridge, "get_seen", lambda _d, _t: 12345)
     body = client.get(f"/api/tick?tenant={other}").get_json()
     # Nulls already mean "no information" to the frontend, which falls back to
     # its own timer -- the alternative is attaching our device's live band to
@@ -189,7 +234,7 @@ def test_live_tick_reports_no_information_for_another_home(client, two_tenants, 
 
 def test_band_table_is_not_borrowed_across_homes(client, two_tenants, monkeypatch):
     _, other = two_tenants
-    monkeypatch.setattr(bands, "get_table", lambda: {"co2_ppm": [[1000, 1]]})
+    monkeypatch.setattr(bands, "get_table", lambda device=None: {"co2_ppm": [[1000, 1]]})
     assert client.get("/api/bands").status_code == 200
     res = client.get(f"/api/bands?tenant={other}")
     assert res.status_code == 404
@@ -199,9 +244,10 @@ def test_band_table_is_not_borrowed_across_homes(client, two_tenants, monkeypatc
 def test_device_controls_refuse_another_home(client, two_tenants, monkeypatch):
     _, other = two_tenants
     monkeypatch.setattr(mqtt_bridge, "available", lambda: True)
-    monkeypatch.setattr(mqtt_bridge, "device_online", lambda: True)
+    monkeypatch.setattr(mqtt_bridge, "device_online", lambda d: True)
     published = []
-    monkeypatch.setattr(mqtt_bridge, "publish_switch", lambda o, s: published.append((o, s)))
+    monkeypatch.setattr(mqtt_bridge, "publish_switch",
+                        lambda d, o, s: published.append((d, o, s)))
 
     res = client.post(f"/api/control/switch/{mqtt_bridge.PREVENT_SLEEP}?tenant={other}",
                       json={"state": True})
@@ -281,29 +327,153 @@ def test_an_unknown_device_falls_back_to_our_own_in_our_own_home(two_devices):
     assert tenants.resolve_device("aqm_nonexistent", None, tenant=own) == tenants.own_device()
 
 
-def test_ownership_is_not_gated_by_a_device_when_none_is_configured(monkeypatch):
-    # Regression: MQTT_TOPIC_PREFIX with no device segment (and CI, which has
-    # no .env at all) left own_device() empty, which made is_own() false for
-    # everything and turned unrelated 400s into 409s.
-    monkeypatch.setenv("MQTT_TOPIC_PREFIX", "somehome")
-    tenants.set_current("somehome")
-    tenants.set_current_device(None)
-    assert tenants.own_device() == ""
+def test_ownership_is_the_house_plus_one_selected_device(two_devices):
+    own, other = two_devices
+    tenants.set_current(own)
+    # Any sensor in our own house is ours to control -- that is what house
+    # scoping means, and it is why one container now serves every room.
+    tenants.set_current_device("aqm_beta")
     assert tenants.is_own() is True
+    assert tenants.is_own_house() is True
+    # "All devices" is our house but not one sensor: a command cannot be aimed
+    # at every room at once, and no single sensor's live band speaks for the
+    # house. is_own_house stays true -- house-level writes are still fine.
+    tenants.set_current_device(None)
+    assert tenants.is_own() is False
+    assert tenants.is_own_house() is True
+    # Another house is out of reach at both levels: no broker grant there, and
+    # a publish would be denied silently at QoS 0.
+    tenants.set_current(other)
+    tenants.set_current_device("aqm_gamma")
+    assert tenants.is_own() is False
+    assert tenants.is_own_house() is False
 
 
-def test_controls_refuse_a_different_device_in_our_own_home(client, two_devices, monkeypatch):
+def test_control_device_is_the_selected_one_never_a_default(two_devices):
     own, _ = two_devices
-    monkeypatch.setattr(mqtt_bridge, "available", lambda: True)
-    monkeypatch.setattr(mqtt_bridge, "device_online", lambda: True)
-    published = []
-    monkeypatch.setattr(mqtt_bridge, "publish_switch", lambda o, s: published.append(o))
+    tenants.set_current(own)
+    tenants.set_current_device("aqm_beta")
+    # Substituting own_device() here would publish a command aimed at one room
+    # into another, and at QoS 0 nothing would ever report the difference.
+    assert tenants.control_device() == "aqm_beta"
+    assert tenants.control_device() != tenants.own_device()
+    tenants.set_current_device(None)
+    assert tenants.control_device() is None
 
-    # Same house, different sensor: a command would still land on OUR device.
+
+def test_controls_reach_a_different_device_in_our_own_home(client, two_devices, monkeypatch):
+    """The point of house scoping: N rooms, one container.
+
+    This asserts the command carries the SELECTED device, not merely that it
+    returned 200 -- publishing to the default sensor's topic would look
+    identical from the caller's side and land in the wrong room."""
+    monkeypatch.setattr(mqtt_bridge, "available", lambda: True)
+    online = []
+    monkeypatch.setattr(mqtt_bridge, "device_online", lambda d: online.append(d) or True)
+    published = []
+    monkeypatch.setattr(mqtt_bridge, "publish_switch",
+                        lambda d, o, s: published.append((d, o, s)))
+
     res = client.post(f"/api/control/switch/{mqtt_bridge.PREVENT_SLEEP}?device=aqm_beta",
                       json={"state": True})
+    assert res.status_code == 200
+    assert published == [("aqm_beta", mqtt_bridge.PREVENT_SLEEP, True)]
+    # Reachability is asked about that same sensor: rooms deep-sleep on
+    # independent cycles, so another one being awake answers nothing.
+    assert online == ["aqm_beta"]
+
+
+def test_every_control_kind_carries_the_selected_device(client, two_devices, monkeypatch):
+    """All four publish helpers, because they are four separate call sites and
+    only one of them was covered above."""
+    monkeypatch.setattr(mqtt_bridge, "available", lambda: True)
+    monkeypatch.setattr(mqtt_bridge, "device_online", lambda d: True)
+    seen = []
+    monkeypatch.setattr(mqtt_bridge, "publish_number", lambda d, o, v: seen.append(d))
+    monkeypatch.setattr(mqtt_bridge, "publish_select", lambda d, o, p: seen.append(d))
+    monkeypatch.setattr(mqtt_bridge, "publish_button", lambda d, o: seen.append(d))
+
+    assert client.post(f"/api/control/number/{mqtt_bridge.LED_BRIGHTNESS}?device=aqm_beta",
+                       json={"value": 40}).status_code == 200
+    assert client.post(f"/api/control/select/{mqtt_bridge.LED_AMBIENCE}?device=aqm_beta",
+                       json={"option": "Breathing"}).status_code == 200
+    assert client.post(f"/api/control/button/{mqtt_bridge.ESP_REBOOT}?device=aqm_beta"
+                       ).status_code == 200
+    assert seen == ["aqm_beta", "aqm_beta", "aqm_beta"]
+
+
+def test_controls_refuse_the_all_devices_view(client, two_devices, monkeypatch):
+    monkeypatch.setattr(mqtt_bridge, "available", lambda: True)
+    monkeypatch.setattr(mqtt_bridge, "device_online", lambda d: True)
+    published = []
+    monkeypatch.setattr(mqtt_bridge, "publish_switch",
+                        lambda d, o, s: published.append((d, o, s)))
+
+    # An explicit empty ?device= is the picker's All-devices option.
+    res = client.post(f"/api/control/switch/{mqtt_bridge.PREVENT_SLEEP}?device=",
+                      json={"state": True})
     assert res.status_code == 409
-    assert published == []
+    assert published == [], "a command was published with no device selected"
+    # The message has to name the actual fix. "Only available for Walnut --
+    # you're viewing Walnut" is the nonsense this branch exists to avoid.
+    assert "one device selected" in res.get_json()["error"]
+    assert client.get("/api/controls?device=").status_code == 409
+
+
+def test_live_state_follows_the_selected_device(client, two_devices, monkeypatch):
+    """/api/tick and /api/controls read one sensor's slice of the bridge cache.
+
+    The cache is keyed by (device, suffix) now; serving the default sensor's
+    snapshot under another room's name would attach one room's live band to
+    another's readings -- the same lie the cross-tenant check prevents."""
+    monkeypatch.setattr(mqtt_bridge, "get_raw",
+                        lambda d, t: json.dumps({"air_band": 4}) if d == "aqm_beta" else None)
+    monkeypatch.setattr(mqtt_bridge, "get_seen", lambda d, t: 999 if d == "aqm_beta" else None)
+    monkeypatch.setattr(mqtt_bridge, "get_state", lambda d: {"online": True, "device": d})
+
+    body = client.get("/api/tick?device=aqm_beta").get_json()
+    assert body["air_band"] == 4 and body["seen_at"] == 999
+    assert client.get("/api/controls?device=aqm_beta").get_json()["device"] == "aqm_beta"
+
+    # The default sensor has published nothing, and says so rather than
+    # borrowing the other room's snapshot.
+    quiet = client.get(f"/api/tick?device={tenants.own_device()}").get_json()
+    assert quiet["air_band"] is None and quiet["seen_at"] is None
+
+    # All devices: no single sensor to report, and nulls already mean "no
+    # information" to the frontend.
+    both = client.get("/api/tick?device=").get_json()
+    assert both["air_band"] is None and both["seen_at"] is None
+
+
+def test_band_table_follows_the_selected_device(client, two_devices, monkeypatch):
+    """Each sensor publishes its own table (they can be on different firmware),
+    so the table has to come from the sensor on screen -- serving another's is
+    the invented-default this app refuses to do."""
+    asked = []
+    monkeypatch.setattr(bands, "get_table",
+                        lambda device=None: asked.append(device) or {"co2": [1000]})
+    assert client.get("/api/bands?device=aqm_beta").status_code == 200
+    assert asked == ["aqm_beta"]
+    # ...and there is no house-wide answer to give.
+    res = client.get("/api/bands?device=")
+    assert res.status_code == 404
+    assert "band table" in res.get_json()["error"]
+
+
+def test_the_home_location_is_a_house_level_write(client, two_devices, monkeypatch):
+    """Regression guard for the weaker check: the home location belongs to the
+    house (outside_air_quality has no device_id at all), so it must not be
+    gated on which room is selected -- including "All devices"."""
+    saved = []
+    monkeypatch.setattr(app_module, "_resolve_zip",
+                        lambda z: {"lat": 42.6, "lon": -83.4, "reporting_area": "Orchard Lake, MI"})
+    monkeypatch.setattr(purpleair, "nearest_outdoor_sensor", lambda lat, lon: None)
+    monkeypatch.setattr(home_config, "set_home",
+                        lambda **kw: (saved.append(kw) or (kw, True)))
+    assert client.post("/api/home?device=", json={"zip": "48324"}).status_code == 200
+    assert client.post("/api/home?device=aqm_beta", json={"zip": "48324"}).status_code == 200
+    assert len(saved) == 2
 
 
 def test_device_picker_hidden_with_one_device(client, two_tenants, monkeypatch):
@@ -317,6 +487,18 @@ def test_device_picker_appears_with_two(client, two_devices):
     assert 'id="device-select"' in page
     assert "aqm_beta" in page
     assert "All devices" in page
+
+
+def test_every_room_in_our_house_is_offered_as_controllable(two_devices):
+    """The picker's third element drives the "(read-only)" suffix. While this
+    container was pinned to one sensor it marked every other room read-only,
+    which is now simply false -- controllability is a property of the house."""
+    own, other = two_devices
+    tenants.set_current(own)
+    assert [c for _, _, c in tenants.device_choices()] == [True, True]
+    # ...and no room in someone else's house is.
+    tenants.set_current(other)
+    assert not any(c for _, _, c in tenants.device_choices())
 
 
 def test_switching_home_does_not_carry_the_device_across(client, two_devices):

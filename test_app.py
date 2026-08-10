@@ -12,12 +12,40 @@ import google_aq
 import home_config
 import influx
 import purpleair
+import tenants
 
 
 @pytest.fixture
 def client():
     app_module.app.config["TESTING"] = True
     return app_module.app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_house(monkeypatch):
+    """Pin the house, the sensors in it, and therefore what each request selects.
+
+    CI has no .env and app.py calls load_dotenv(), so anything these routes read
+    from the environment passes on a developer's machine and fails on the runner
+    (or the reverse). Two things now depend on it. The control routes need a
+    SELECTED DEVICE -- house scoping refuses "all devices" with a 409, since a
+    command cannot be aimed at every sensor at once -- and the device list comes
+    from an InfluxDB tag query, so on a runner with no InfluxDB nothing would be
+    selected and every 400/404/503 asserted in this file would come back 409.
+
+    One sensor here on purpose: this file is about the error-status mapping, not
+    about multi-device selection (test_tenants.py owns that), and one device is
+    what makes the selection unambiguous without any request having to say so."""
+    monkeypatch.setenv("MQTT_HOUSE_PREFIX", "walnut")
+    monkeypatch.delenv("MQTT_TOPIC_PREFIX", raising=False)
+    monkeypatch.delenv("MQTT_DEVICE", raising=False)
+    monkeypatch.setattr(tenants, "known", lambda force=False: ("walnut",))
+    monkeypatch.setattr(tenants, "known_devices",
+                        lambda tenant=None, force=False: ("living_room",))
+    yield
+    # Nothing running off the request path should inherit this request's view.
+    tenants.set_current(None)
+    tenants.set_current_device(None)
 
 
 @pytest.mark.parametrize("path", ["/", "/indoor", "/outdoor", "/forecast", "/device"])
@@ -63,8 +91,8 @@ def test_tick_reports_seen_and_band(client, monkeypatch):
     # from the MQTT cache, so it must not touch InfluxDB -- query_latest is left
     # unpatched here deliberately; a call would blow up on a missing client.
     monkeypatch.setattr(app_module.mqtt_bridge, "get_raw",
-                        lambda suffix: '{"air_band": 2, "co2_ppm": 900}')
-    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: 1234.5)
+                        lambda device, suffix: '{"air_band": 2, "co2_ppm": 900}')
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda device, suffix: 1234.5)
     d = client.get("/api/tick").get_json()
     assert d == {"seen_at": 1234.5, "air_band": 2, "app_version": app_module.APP_VERSION}
 
@@ -72,8 +100,8 @@ def test_tick_reports_seen_and_band(client, monkeypatch):
 def test_tick_nulls_when_nothing_received(client, monkeypatch):
     # Broker down or no message yet. Nulls mean "no information" and let the
     # frontend fall back to its timer; this must not be an error status.
-    monkeypatch.setattr(app_module.mqtt_bridge, "get_raw", lambda suffix: None)
-    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: None)
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_raw", lambda device, suffix: None)
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda device, suffix: None)
     res = client.get("/api/tick")
     assert res.status_code == 200
     assert res.get_json() == {"seen_at": None, "air_band": None, "app_version": app_module.APP_VERSION}
@@ -82,8 +110,8 @@ def test_tick_nulls_when_nothing_received(client, monkeypatch):
 def test_tick_survives_malformed_payload(client, monkeypatch):
     # A truncated retained payload must not 500 the endpoint the whole refresh
     # loop depends on; seen_at is still useful as a change token without it.
-    monkeypatch.setattr(app_module.mqtt_bridge, "get_raw", lambda suffix: "{ truncated")
-    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda suffix: 99.0)
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_raw", lambda device, suffix: "{ truncated")
+    monkeypatch.setattr(app_module.mqtt_bridge, "get_seen", lambda device, suffix: 99.0)
     res = client.get("/api/tick")
     assert res.status_code == 200
     assert res.get_json() == {"seen_at": 99.0, "air_band": None, "app_version": app_module.APP_VERSION}
@@ -92,7 +120,7 @@ def test_tick_survives_malformed_payload(client, monkeypatch):
 def test_bands_404_when_device_never_published(client, monkeypatch):
     # A 404 rather than a built-in default, so the frontend renders uncoloured
     # instead of showing thresholds this app made up. See bands.py.
-    monkeypatch.setattr(bands, "get_table", lambda: None)
+    monkeypatch.setattr(bands, "get_table", lambda device=None: None)
     assert client.get("/api/bands").status_code == 404
 
 
@@ -100,7 +128,7 @@ def test_bands_ok(client, monkeypatch):
     table = {"aqi": [50, 100, 150, 200, 300], "co2": [800, 1100, 2000, 3500, 5000],
              "voc": [150, 250, 400], "nox": [20, 150, 250, 400],
              "colors": ["#00c000"], "compare": "lte"}
-    monkeypatch.setattr(bands, "get_table", lambda: table)
+    monkeypatch.setattr(bands, "get_table", lambda device=None: table)
     res = client.get("/api/bands")
     assert res.status_code == 200
     assert res.get_json()["co2"] == [800, 1100, 2000, 3500, 5000]
@@ -155,7 +183,7 @@ def _reachable(monkeypatch, broker=True, device=True):
     in this file populate, so relying on the ambient value made these pass in a
     full run and fail when the file was run alone."""
     monkeypatch.setattr(app_module.mqtt_bridge, "available", lambda: broker)
-    monkeypatch.setattr(app_module.mqtt_bridge, "device_online", lambda: device)
+    monkeypatch.setattr(app_module.mqtt_bridge, "device_online", lambda target: device)
 
 
 def test_control_503_when_mqtt_unavailable(client, monkeypatch):
@@ -173,7 +201,7 @@ def test_control_503_when_device_is_offline(client, monkeypatch):
     published = []
     monkeypatch.setattr(
         app_module.mqtt_bridge, "publish_switch",
-        lambda object_id, on: published.append((object_id, on)),
+        lambda device, object_id, on: published.append((object_id, on)),
     )
     res = client.post("/api/control/switch/led_alarm_mode", json={"state": True})
     assert res.status_code == 503
@@ -197,7 +225,7 @@ def test_control_led_alarm_mode_is_accepted(client, monkeypatch):
     published = []
     monkeypatch.setattr(
         app_module.mqtt_bridge, "publish_switch",
-        lambda object_id, on: published.append((object_id, on)),
+        lambda device, object_id, on: published.append((object_id, on)),
     )
     res = client.post("/api/control/switch/led_alarm_mode", json={"state": True})
     assert res.status_code == 200
@@ -218,7 +246,7 @@ def test_led_brightness_accepts_full_range_including_zero(client, monkeypatch):
     published = []
     monkeypatch.setattr(
         app_module.mqtt_bridge, "publish_number",
-        lambda object_id, value: published.append((object_id, value)),
+        lambda device, object_id, value: published.append((object_id, value)),
     )
     for value in (0, 50, 100):
         res = client.post(
@@ -248,7 +276,7 @@ def test_led_night_brightness_shares_the_day_slider_bounds(client, monkeypatch):
     published = []
     monkeypatch.setattr(
         app_module.mqtt_bridge, "publish_number",
-        lambda object_id, value: published.append((object_id, value)),
+        lambda device, object_id, value: published.append((object_id, value)),
     )
     for value in (0, 50, 100):
         res = client.post(
@@ -273,7 +301,7 @@ def test_ambience_select_accepts_every_option_the_device_has(client, monkeypatch
     published = []
     monkeypatch.setattr(
         app_module.mqtt_bridge, "publish_select",
-        lambda object_id, option: published.append((object_id, option)),
+        lambda device, object_id, option: published.append((object_id, option)),
     )
     for option in ("Off", "Breathing", "Steampunk"):
         res = client.post(
@@ -313,7 +341,7 @@ def test_ambience_intensity_accepts_full_range(client, monkeypatch):
     published = []
     monkeypatch.setattr(
         app_module.mqtt_bridge, "publish_number",
-        lambda object_id, value: published.append((object_id, value)),
+        lambda device, object_id, value: published.append((object_id, value)),
     )
     for value in (0, 40, 100):
         assert client.post(

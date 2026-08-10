@@ -67,14 +67,35 @@ python app.py
   Tokens* if it ever leaks.
 - `MQTT_USERNAME` / `MQTT_PASSWORD` — mosquitto credentials for this app's
   own client (publishes commands, subscribes to state topics under
-  `MQTT_TOPIC_PREFIX`). `MQTT_TOPIC_PREFIX` must match the `mqtt_topic`
-  substitution in [`apollo-air1-mqtt-esphome`](../apollo-air1-mqtt-esphome)'s
-  `apollo-air1-mqtt.yaml`.
+  `MQTT_HOUSE_PREFIX`).
+- `MQTT_HOUSE_PREFIX` — the **house** this container is wired to: one topic
+  segment, no slashes. The app subscribes to `<house>/#`, so one container
+  serves every sensor in the house. Must match the first segment of the
+  `mqtt_topic` substitution in
+  [`apollo-air1-mqtt-esphome`](../apollo-air1-mqtt-esphome)'s
+  `apollo-air1-mqtt.yaml` (`<house>/<device>`), and the broker ACL must grant
+  that whole subtree.
+- `MQTT_DEVICE` — optional. The room a visitor lands on before touching the
+  picker, and the one entry the device list can still offer while InfluxDB is
+  down (the list is otherwise a tag query, so without it an InfluxDB outage
+  would leave nothing selected and take the *broker* controls down with the
+  *database*). It is **not** a limit: controls reach any device in the house.
+- `MQTT_TOPIC_PREFIX` — **deprecated**, still honoured. The old single-device
+  pin `<house>/<device>`: its first segment is used as the house and its second
+  as `MQTT_DEVICE`, so an env that hasn't been updated behaves exactly as
+  before. The two settings above win when both are present.
 - `AIRNOW_API_KEY` / `AIRNOW_ZIP` — from [docs.airnowapi.org](https://docs.airnowapi.org/),
   used for the Technical view's outdoor AQI card. Responses are cached ~55min
   in memory (AirNow itself updates hourly).
 
 ## API
+
+Every route below answers for the **selected house and device** (`?tenant=`,
+`?device=`, or the saved cookies — see
+[One house per container](#one-house-per-container-every-room-in-it)). The
+live-state and control routes need one specific device of ours and return
+`409`/`404` without one; the outside-air routes never filter by device, because
+outside readings belong to the house.
 
 - `GET /api/tick` — `{seen_at, air_band}` read from the MQTT bridge's in-memory
   cache. No InfluxDB, no network. Polled every 5s by the pages purely as a
@@ -97,18 +118,22 @@ python app.py
   `DELETE /api/locations/<zip>` — saved locations for the forecast switcher,
   persisted to `data/locations.json` (bind-mounted, see above, so they
   survive `docker compose up --build`).
-- `GET /api/controls` — cached state of the device's switches/numbers plus
-  online/offline (from its MQTT birth/LWT `status` topic). Also carries
+- `GET /api/controls` — cached state of the **selected** device's
+  switches/numbers plus online/offline (from that device's MQTT birth/LWT
+  `status` topic — rooms deep-sleep on independent cycles, so one being awake
+  says nothing about another). Also carries
   `led_brightness_effective` and `sun_elevation_deg`, read out of the device's
   combined `/state` snapshot rather than from a control topic — see
   [Day/night LED](#daynight-led). Both are `null` on firmware older than the
   release that added them.
 - `POST /api/control/switch/<id>`, `/api/control/number/<id>`,
   `/api/control/select/<id>` (`{option}`, validated against the device's own
-  option list), `/api/control/button/<id>` — publish a command. The AIR-1 deep-sleeps
-  between reads, so commands are **best-effort**: they're sent immediately
-  but only take effect once the device is next awake and connected. Return
-  `503` if the MQTT broker isn't currently reachable.
+  option list), `/api/control/button/<id>` — publish a command to the
+  **selected** device. The AIR-1 deep-sleeps between reads, so commands are
+  **best-effort**: they're sent immediately but only take effect once the
+  device is next awake and connected. Return `503` if the MQTT broker isn't
+  currently reachable, and `409` when there is no single device of ours to aim
+  at (another house, or the "All devices" view).
 - `GET /healthz` — liveness probe (used by the container healthcheck). Always
   `200` while the process is up; deliberately does **not** depend on InfluxDB
   or MQTT, so an upstream outage doesn't make the container look dead. Reports
@@ -144,7 +169,13 @@ Two consequences worth knowing:
 - **No table, no colour.** If the device has never published one, `/api/bands`
   returns 404 and readings render uncoloured rather than in a colour this app
   invented — inventing one is how the two drifted apart. The last known table is
-  cached to `data/bands.json`, so a broker outage doesn't strip the colour out.
+  cached to `data/bands-<device>.json`, so a broker outage doesn't strip the
+  colour out. Per device, because two rooms can be on different firmware (or a
+  retune rolls out to one first) — serving one room's cached cuts under
+  another's readings would be exactly the invented default this refuses. The
+  "All devices" view has no table for the same reason: there is no house-wide
+  answer, so `/api/bands` 404s rather than letting one sensor speak for the
+  house.
 - **Outdoor AQI now uses the device's AQI cuts too.** Those cuts *are* the EPA
   categories, so this is a strict improvement (previously everything above 150
   was one flat "bad"; there are now bands at 200 and 300). But it does mean the
@@ -296,44 +327,56 @@ broadly, add a shared-secret/token check on the `/api/control/*` routes (the
 three handlers already share a single guard helper, so it's a one-place
 change) rather than relying on the network boundary alone.
 
-The **broker** is a separate boundary and is no longer wide open. As of
-2026-08-05 this app authenticates with its own account (`nathan`), scoped by
-topic ACL to `cosmos-lab/smarthome/air1/#` and nothing else — it cannot see or
-write another device's tree, let alone another tenant's. Note the consequence
-when changing `MQTT_TOPIC_PREFIX`: a prefix outside that root is **silently
-denied** at QoS 0, so the app will look healthy and simply stop receiving.
-Config and rationale live in
+The **broker** is a separate boundary and is no longer wide open. This app
+authenticates with its own account, scoped by topic ACL to its own house's
+subtree (`<house>/#`) and nothing else — it cannot see or write another
+house's tree. The grant is per house rather than per device now, because one
+container serves every room; within our own house it can reach any sensor, and
+outside it, nothing. Note the consequence when changing `MQTT_HOUSE_PREFIX`: a
+topic outside the ACL grant is **silently denied** at QoS 0, so the app will
+look healthy and simply stop receiving. Config and rationale live in
 [`coslab-mqtt-broker`](https://github.com/cosmoslab58/coslab-mqtt-broker).
 
-## Viewing more than one home
+## One house per container, every room in it
 
 The dashboard can **show** any home that has logged data, while staying
-**wired** to exactly one.
+**wired** to exactly one — and the unit of wiring is the **house**, not the
+sensor. `MQTT_HOUSE_PREFIX` pins the tree this container subscribes to
+(`<house>/#`) and publishes controls on, and the ACL enforces it from the other
+side, so live state and the control endpoints work for **any room in our own
+house** and for nothing outside it.
 
-The split follows the broker. `MQTT_TOPIC_PREFIX` pins the tree this container
-subscribes to and publishes controls on, and the ACL enforces it from the other
-side — so live device state and the control endpoints can only ever be this
-container's own home. Everything else the app renders is an InfluxDB read,
-including "current conditions" for all four outside providers (Node-RED polls
-them in; the app never calls an upstream provider for Home). Node-RED tags every
-point with `tenant`, so scoping those reads to a chosen home covers nearly the
-whole surface in one place.
+That is a change: this container used to be pinned to one device
+(`MQTT_TOPIC_PREFIX=<house>/<device>`), which meant N rooms needed N
+containers. The bridge now keys its cache by `(device, suffix)` — a flat
+suffix dict had two rooms overwriting each other's `state` and `status`, which
+would have reported whichever published last as both, silently — and every
+accessor and publish helper takes an explicit device. There is deliberately no
+default: at QoS 0 a command sent to the wrong room is indistinguishable from
+success here, so "which sensor" is always a decision the route has already
+made.
+
+Everything else the app renders is an InfluxDB read, including "current
+conditions" for all four outside providers (Node-RED polls them in; the app
+never calls an upstream provider for Home). Node-RED tags every point with
+`tenant`, so scoping those reads to a chosen home covers nearly the whole
+surface in one place.
 
 - **The picker** is in the settings gear, and appears only once a second home
   has data. The list comes from InfluxDB's `tenant` tag values, not config, so a
   newly provisioned home shows up on its own. `TENANT_LABELS` gives them
   readable names; without it the picker shows the raw tenant id.
-- **The ids** are the two segments of `MQTT_TOPIC_PREFIX` — `<house>/<device>`,
-  the same convention Node-RED uses reading them off `+/+/state`. One rule on
-  both sides is what stops the two disagreeing about who a reading belongs to.
-  Both moved together in the 2026-08-09 rename (`cosmoslab/air1` →
-  `walnut/aqm_alpha`), which is why neither is derived from the other.
+- **The house id** is `MQTT_HOUSE_PREFIX`, the same first topic segment
+  Node-RED reads as the tenant off `+/+/state`. One rule on both sides is what
+  stops the two disagreeing about who a reading belongs to. (Deriving it from
+  a legacy `MQTT_TOPIC_PREFIX` is back-compat only.)
 - **A second picker appears when a home has more than one sensor**, with an
   "All devices" option. Device ids are only unique *within* a house, so devices
   are always resolved against the selected home; switching home picks that
   home's own sensor rather than carrying one across. Device scoping applies to
   indoor readings only — outside readings belong to the house and carry no
   `device_id`, so filtering them by device would blank every outside panel.
+  Every room in *our* house is offered as controllable, because it is.
 - **Both lists are derived from data, not the tag index.** `schema.tagValues`
   answers from the series index, which keeps values whose points were deleted
   until compaction — after the rename that left deleted homes in the picker,
@@ -346,16 +389,30 @@ whole surface in one place.
   information"; `/api/bands` 404s rather than colouring one home's readings with
   another device's thresholds; device controls and the home-location save return
   409.
+- **"All devices" is read-only too, for a different reason** — and the two are
+  kept apart deliberately. It is our own house (the header does *not* badge it
+  "read-only", which would be a lie about whose readings these are), but a
+  command cannot be aimed at every sensor at once and no one sensor's live band
+  speaks for the house. `/api/tick` nulls, `/api/bands` 404s, `/api/controls`
+  and the control routes 409 with a message naming the actual fix — *pick a
+  room*, not *switch home*. The one exception is the **home location**, which
+  belongs to the house (outside readings carry no `device_id` at all), so it is
+  gated on the house alone and stays available.
 
 Every InfluxDB query is scoped in `influx._flux` — one place, so no route or
 provider module can forget. Without it `query_latest`'s `last()` returns
 whichever home reported most recently and indoor history interleaves two houses
-on one chart, with no visible symptom.
+on one chart, with no visible symptom. The device filter lives in that same
+place and applies to `air_quality` only — `outside_air_quality` has no
+`device_id`, and filtering it by device would match nothing and blank every
+outside panel, which looks exactly like an upstream outage.
 
-A second home still needs its own container to be *controllable*: its own
-broker account and topic ACL, its own device, and its own Node-RED registry row
-(see `coslab-nodered-flows`). Provider API keys live on the Node-RED container,
-which polls once per home — they are not per-tenant here.
+A second **house** still needs its own container to be *controllable*: its own
+broker account and topic ACL, and its own Node-RED registry row (see
+`coslab-nodered-flows`). A second **room in this house** needs none of that —
+add the device, and it appears in the picker with working controls. Provider
+API keys live on the Node-RED container, which polls once per home — they are
+not per-tenant here.
 
 ## Related repos
 
