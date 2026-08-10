@@ -258,7 +258,7 @@ def known_devices(tenant=None, force=False):
     written anything.
 
     Scoped to the tenant on purpose: device ids are only unique within a house
-    (two homes may each run an `aqm_alpha`), so a global device list would
+    (two homes may each run a `living_room`), so a global device list would
     offer a device that has no data under the selected home."""
     tenant = tenant or current()
     now = time.monotonic()

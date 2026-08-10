@@ -24,12 +24,29 @@ DATA_DIR = os.environ.get("DATA_DIR", "data")
 HOME_FILE = os.path.join(DATA_DIR, "home.json")
 
 # Retained topic Node-RED subscribes to for the home poll config. Overridable so
-# a test/staging deploy -- or another tenant -- can point at its own topic.
-# The default must stay inside this tenant's own root: Node-RED subscribes to
-# the wildcard `+/air1/config/home` and takes the FIRST topic segment as the
-# tenant id, so a topic outside that shape lands under the wrong tenant (or,
-# outside the broker ACL grant, is silently denied at QoS 0).
-CONFIG_TOPIC = os.environ.get("HOME_CONFIG_TOPIC", "cosmoslab/air1/config/home")
+# a test/staging deploy -- or another account -- can point at its own topic.
+#
+# The value must follow the estate topic convention, `<account>/<device>/config/home`.
+# Node-RED subscribes to the wildcard `+/+/config/home` and derives the account
+# from the FIRST segment and the device from the LAST one before the channel, so
+# a topic outside that shape lands under the wrong account or -- outside the
+# broker ACL grant -- is silently denied at QoS 0 with nothing logged anywhere.
+#
+# The default is DERIVED rather than written out, deliberately. It used to be the
+# literal "cosmoslab/air1/config/home" and stayed wrong through two renames
+# without anyone noticing, because .env and the container env both set
+# HOME_CONFIG_TOPIC explicitly and masked it. A hardcoded default here is a
+# second, independent copy of the topic that nothing keeps in step; deriving it
+# from the same MQTT_HOUSE_PREFIX/MQTT_DEVICE the rest of the app is wired to
+# means it cannot drift on its own again. If those are unset there is no
+# sensible guess, so the default is empty and a publish fails loudly rather than
+# going somewhere plausible and wrong.
+_house = os.environ.get("MQTT_HOUSE_PREFIX", "").strip("/")
+_device = os.environ.get("MQTT_DEVICE", "").strip("/")
+CONFIG_TOPIC = os.environ.get(
+    "HOME_CONFIG_TOPIC",
+    f"{_house}/{_device}/config/home" if _house and _device else "",
+)
 
 ZIP_RE = re.compile(r"^\d{5}$")
 

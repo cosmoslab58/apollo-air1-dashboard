@@ -273,6 +273,12 @@ def two_devices(monkeypatch, two_tenants):
 
 
 def test_own_device_is_the_second_topic_segment(monkeypatch):
+    # Deliberately a DEAD device name on the legacy `MQTT_TOPIC_PREFIX` setting.
+    # `aqm_alpha` was renamed to `living_room` on 2026-08-09 and no longer exists
+    # anywhere in the live system -- which is the point. This test covers the
+    # back-compat fallback in own()/own_device(), so using a name the current
+    # deployment still uses would let a regression pass by accident. Do not
+    # "fix" this to `living_room`; see the same note on the fixture above.
     monkeypatch.setenv("MQTT_TOPIC_PREFIX", "walnut/aqm_alpha")
     assert tenants.own() == "walnut"
     assert tenants.own_device() == "aqm_alpha"
