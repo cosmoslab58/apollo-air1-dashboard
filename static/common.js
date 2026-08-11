@@ -652,13 +652,13 @@ function pollInterval(fn, ms) {
  * read on the server, no InfluxDB -- and only calls loadFn when the `seen_at`
  * token advances.
  *
- * This exists because the AIR-1 publishes within a second of its severity band
- * changing, but a page on a 60s timer cannot know that until it next asks: the
- * first reading of an event could sit a full minute before anything fetched it.
- * Polling cannot be woken by an event it has not fetched, so the fix is to make
- * the "has anything changed?" question cheap enough to ask constantly.
+ * This exists because a page on a fixed timer cannot know the device published
+ * until it next asks, so the first reading of an event could sit a long time
+ * before anything fetched it. Polling cannot be woken by an event it has not
+ * fetched, so the fix is to make the "has anything changed?" question cheap
+ * enough to ask constantly.
  *
- * `fallbackMsFor()` is a floor, not the primary mechanism. If /api/tick is
+ * `fallbackMs` is a floor, not the primary mechanism. If /api/tick is
  * unreachable or the MQTT bridge is down, its token never moves and this
  * degrades to exactly the timer-based behaviour it replaced. It also bounds how
  * stale the page can get if a publish is somehow missed.
@@ -668,9 +668,25 @@ function pollInterval(fn, ms) {
  * request delays the next tick instead of stacking behind it, and wrapped so a
  * single throw cannot end the chain and leave a wall display frozen forever
  * (setInterval would merely skip a tick). */
-const WATCH_TICK_MS = 5000;
 
-function watchLatest(loadFn, fallbackMsFor) {
+/* 2s, against a device that publishes every 5s -- so a new reading reaches the
+ * screen within ~2s of arriving, and most ticks correctly find nothing and do
+ * nothing. It was 5s while /api/latest still hit InfluxDB, where every detected
+ * change cost a `-7d` + `last()` Flux query; now that endpoint serves our own
+ * device from the same in-memory snapshot /api/tick reads, so both halves are
+ * dict lookups and ticking faster is nearly free.
+ *
+ * Do not chase this much lower. The floor is physical, not transport: the SCD40
+ * produces a measurement every ~5s, so end-to-end latency is dominated by the
+ * sensor and no amount of polling (or SSE) beats it. The LED is instant either
+ * way -- led_evaluate runs on-device from each sensor's own on_value.
+ *
+ * SSE was considered and rejected on this deployment: gunicorn runs one worker
+ * with eight threads (the MQTT bridge holds in-process state), and each open
+ * SSE connection would pin one for the life of the tab. See /api/tick. */
+const WATCH_TICK_MS = 2000;
+
+function watchLatest(loadFn, fallbackMs) {
   let timer = null;
   let lastSeen = null;
   let lastLoad = 0;
@@ -692,7 +708,7 @@ function watchLatest(loadFn, fallbackMsFor) {
       }
     } catch (e) { /* fall through to the timer floor */ }
 
-    if (changed || Date.now() - lastLoad >= fallbackMsFor()) {
+    if (changed || Date.now() - lastLoad >= fallbackMs) {
       lastLoad = Date.now();
       try { await loadFn(); } catch (e) { /* keep watching */ }
     }
@@ -709,38 +725,18 @@ function watchLatest(loadFn, fallbackMsFor) {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) run(); });
 }
 
-/* ---------- how fast to poll /api/latest ----------
- * The AIR-1 publishes faster during an event than at rest, so a fixed 60s poll
- * would throw most of that away: worst case a 15s-old reading takes a full
- * minute to reach the screen.
+/* ---------- freshness floor for /api/latest ----------
+ * A FLOOR, not the poll rate. watchLatest hits /api/tick every WATCH_TICK_MS
+ * and reloads the moment `seen_at` advances, so this only decides how long we
+ * tolerate going without a reload when nothing is changing at all.
  *
- * Both the threshold and the two rates come from the device's band table
- * (`elevated_band`, `period_s`, `period_elevated_s`) rather than being repeated
- * here. Retuning the firmware's cadence therefore retunes this automatically --
- * and, more to the point, the app cannot end up polling fast at moments the
- * device isn't publishing fast, or slowly at moments it is.
- *
- * The value graded is `air_band`, the 0-5 worst-of the FIRMWARE published in the
- * snapshot -- not re-derived here from co2_ppm/aqi/voc_index.
- *
- * Getting the threshold right needed measurement on the firmware side, and the
- * firmware README has the numbers: "above green" was true ~50% of the time until
- * the VOC green band was retuned to cover the index's own resting value. This
- * side just follows whatever the device reports, whichever way that lands.
- *
- * Fallbacks are the slow rate: a missing air_band means firmware too old to have
- * an elevated rate at all, so there is nothing faster to collect, and a missing
- * table means we don't know the device's cadence and shouldn't guess at it. */
-const LATEST_POLL_FALLBACK_MS = 60000;
-
-function latestPollMs(latest) {
-  const table = bandTable();
-  const band = latest && latest.air_band;
-  const slow = (table && table.period_s * 1000) || LATEST_POLL_FALLBACK_MS;
-  const fast = (table && table.period_elevated_s * 1000) || slow;
-  const threshold = table && typeof table.elevated_band === "number" ? table.elevated_band : Infinity;
-  return typeof band === "number" && band >= threshold ? fast : slow;
-}
+ * This used to be a function, latestPollMs(), that picked between the device's
+ * slow and elevated cadences from the retained band table. Firmware
+ * 1.3.15-mqtt removed the variable rate entirely -- there is one flat cadence
+ * now and `period_elevated_s`/`elevated_band` are gone from the payload -- so
+ * there is nothing left to choose between. Change detection does the real work
+ * and always did; the adaptive branch was only ever tuning the fallback. */
+const LATEST_FALLBACK_MS = 60000;
 
 /* ---------- stale-client reload ----------
  * The page carries the deploy marker it was rendered with (head.html);

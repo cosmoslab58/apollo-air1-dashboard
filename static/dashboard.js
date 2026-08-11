@@ -338,10 +338,10 @@
     loadOutside();
     loadBasicSparks();
   });
-  // The inside reading follows the device's own publish cadence (see
-  // latestPollMs). Outside stays at 15 min -- those are hourly-ish upstream
-  // feeds, so polling them faster returns the same numbers and spends someone
-  // else's API quota doing it.
-  watchLatest(loadLatest, () => latestPollMs(lastInsideLatest));
+  // The inside reading refreshes the moment the device publishes;
+  // LATEST_FALLBACK_MS is only the no-change floor. Outside stays at 15 min --
+  // those are hourly-ish upstream feeds, so polling them faster returns the
+  // same numbers and spends someone else's API quota doing it.
+  watchLatest(loadLatest, LATEST_FALLBACK_MS);
   pollInterval(() => { loadOutside(); loadBasicSparks(); }, 15 * 60000);
 })();

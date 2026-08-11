@@ -1,4 +1,5 @@
 import concurrent.futures
+import datetime
 import json
 import logging
 import os
@@ -331,6 +332,51 @@ def api_bands():
 
 @app.route("/api/latest")
 def api_latest():
+    """The current reading. Live from MQTT for our own device, InfluxDB otherwise.
+
+    The MQTT path exists because these are two different jobs. A live readout
+    wants the newest value and does not care about durability; history wants a
+    uniform cadence and does not care about latency. Node-RED decimates on the
+    way into InfluxDB, so the database deliberately holds a SLOWER series than
+    the device publishes -- serving this endpoint from there would show a
+    reading up to a full decimation window old and make the device's 5s cadence
+    pointless.
+
+    It is also much cheaper. watchLatest reloads whenever /api/tick sees
+    `seen_at` advance, which is now every ~5s, and the InfluxDB path runs a
+    `-7d` + `last()` Flux query every time. That is a dict lookup here instead.
+
+    The InfluxDB fallback is not a degraded mode, it is the correct answer for
+    the cases is_own() refuses: another house (we hold no broker grant there, so
+    no live state exists to read) and "All devices" (no single sensor's snapshot
+    speaks for the house). Both still have stored history, so both still get a
+    reading -- just not a live one.
+    """
+    if tenants.is_own():
+        device = tenants.control_device()
+        raw = mqtt_bridge.get_raw(device, "state")
+        seen = mqtt_bridge.get_seen(device, "state")
+        if raw and seen:
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                # Fall through to InfluxDB rather than 502 -- a malformed
+                # retained payload should not take the page down when a
+                # perfectly good stored reading is one query away.
+                logging.warning("api_latest: retained state payload is not JSON")
+            else:
+                # The receive time, not a device clock: the snapshots carry no
+                # timestamp of their own. Same convention as /api/tick's token.
+                # ISO-8601 because the frontend feeds this straight to
+                # `new Date()` / timeAgo(), which is what the InfluxDB path
+                # returns too -- the two must stay indistinguishable.
+                row["time"] = (
+                    datetime.datetime.fromtimestamp(seen, datetime.UTC)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                )
+                return jsonify(row)
+
     try:
         row = influx.query_latest()
     except Exception:

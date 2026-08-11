@@ -2,6 +2,8 @@
 502, no data -> 404, bad input -> 400) and the MQTT-unavailable 503 guard on
 the control endpoints. Upstream/DB calls are monkeypatched -- no network or
 InfluxDB is touched."""
+import json
+
 import pytest
 
 import airnow
@@ -11,6 +13,7 @@ import bands
 import google_aq
 import home_config
 import influx
+import mqtt_bridge
 import purpleair
 import tenants
 
@@ -151,6 +154,59 @@ def test_latest_ok(client, monkeypatch):
     res = client.get("/api/latest")
     assert res.status_code == 200
     assert res.get_json()["aqi"] == 5
+
+
+def test_latest_prefers_the_live_mqtt_snapshot(client, monkeypatch):
+    """Our own device serves from the retained snapshot, not InfluxDB.
+
+    This is the whole point of the split: Node-RED decimates on the way into
+    InfluxDB, so the database deliberately holds a slower series than the device
+    publishes. Falling back here would show a stale reading and make the
+    device's fast cadence pointless -- so if this ever starts passing through to
+    influx.query_latest, the live readout has silently regressed."""
+    monkeypatch.setattr(mqtt_bridge, "get_raw",
+                        lambda d, s: json.dumps({"co2_ppm": 812, "air_band": 1}))
+    monkeypatch.setattr(mqtt_bridge, "get_seen", lambda d, s: 1786400000.0)
+    monkeypatch.setattr(influx, "query_latest",
+                        lambda: pytest.fail("must not touch InfluxDB for the live device"))
+    res = client.get("/api/latest")
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["co2_ppm"] == 812
+    # ISO-8601 -- the frontend feeds this straight to new Date()/timeAgo(), and
+    # the InfluxDB path returns the same shape. The two must be indistinguishable.
+    assert body["time"] == "2026-08-10T22:13:20Z"
+
+
+def test_latest_falls_back_to_influx_when_nothing_retained(client, monkeypatch):
+    monkeypatch.setattr(mqtt_bridge, "get_raw", lambda d, s: None)
+    monkeypatch.setattr(mqtt_bridge, "get_seen", lambda d, s: None)
+    monkeypatch.setattr(influx, "query_latest", lambda: {"aqi": 7, "time": "t"})
+    assert client.get("/api/latest").get_json()["aqi"] == 7
+
+
+def test_latest_falls_back_rather_than_502_on_a_bad_payload(client, monkeypatch):
+    """A malformed retained payload must not take the page down when a
+    perfectly good stored reading is one query away."""
+    monkeypatch.setattr(mqtt_bridge, "get_raw", lambda d, s: "{not json")
+    monkeypatch.setattr(mqtt_bridge, "get_seen", lambda d, s: 1786400000.0)
+    monkeypatch.setattr(influx, "query_latest", lambda: {"aqi": 9, "time": "t"})
+    res = client.get("/api/latest")
+    assert res.status_code == 200
+    assert res.get_json()["aqi"] == 9
+
+
+def test_latest_uses_influx_for_all_devices(client, monkeypatch):
+    """is_own() is False with no single device selected, so there is no one
+    sensor's snapshot that speaks for the house -- stored history is the only
+    truthful answer, and it is still an answer."""
+    monkeypatch.setattr(mqtt_bridge, "get_raw",
+                        lambda d, s: json.dumps({"co2_ppm": 999}))
+    monkeypatch.setattr(mqtt_bridge, "get_seen", lambda d, s: 1786400000.0)
+    monkeypatch.setattr(influx, "query_latest", lambda: {"aqi": 3, "time": "t"})
+    res = client.get("/api/latest?device=")
+    assert res.status_code == 200
+    assert res.get_json()["aqi"] == 3
 
 
 def test_history_influx_error_is_502(client, monkeypatch):

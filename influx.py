@@ -14,9 +14,8 @@ FIELDS = [
     # readable). Deliberately not derived here or in the browser: the device
     # owns the thresholds that colour its own LED, and re-deriving them
     # elsewhere is how this page ends up disagreeing with the light on the
-    # wall. The frontend also uses it to decide how fast to poll (see
-    # latestPollMs in common.js), because a band above 0 is exactly what makes
-    # the device publish every 15s instead of every 60s.
+    # wall. (It also drove the frontend's poll rate until firmware 1.3.15-mqtt,
+    # when the device's variable 60s/15s cadence was replaced by a flat 5s.)
     #
     # Absent from any point written before the firmware that added it, so every
     # consumer has to tolerate None here, not just on a cold start.

@@ -259,10 +259,10 @@
     loadLatest();
     loadHistory(currentRange);
   });
-  // Readouts follow the device's own publish cadence -- see latestPollMs.
-  // History stays on a flat 60s: it is a far heavier Flux query, and a chart
-  // spanning hours gains much less from a 15s refresh than the current-value
-  // tiles do.
-  watchLatest(loadLatest, () => latestPollMs(previousLatest));
+  // Readouts refresh the moment the device publishes (watchLatest watches
+  // /api/tick); LATEST_FALLBACK_MS is only the no-change floor. History stays
+  // on a flat 60s: it is a far heavier Flux query, and a chart spanning hours
+  // gains much less from a fast refresh than the current-value tiles do.
+  watchLatest(loadLatest, LATEST_FALLBACK_MS);
   pollInterval(() => { loadHistory(currentRange); }, 60000);
 })();
