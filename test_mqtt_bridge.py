@@ -6,7 +6,7 @@ firmware too old to send the fields, a clock that has not synced, a garbled
 payload -- has to come back as None, because the alternative is the app doing
 its own sun arithmetic and eventually disagreeing with the light on the wall.
 That disagreement is the specific failure this dashboard is built to avoid (see
-the band-table plumbing in bands.py for the same argument about colours).
+the band-table plumbing in bands.py for the same argument about colors).
 
 No broker is touched: the parser is fed a snapshot dict directly, and the
 cache tests below hand messages straight to the on_message callback.

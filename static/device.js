@@ -58,15 +58,29 @@
   /* ---------- diagnostics (from the same snapshot the readouts use) ---------- */
   const DIAG_FIELD_IDS = ["d-rssi", "d-esptemp", "d-uptime", "d-firmware", "d-since"];
 
+  /* Uptime in whatever unit keeps it a small number. Raw minutes are right for
+     the first hour and useless after that -- a device up for a day read
+     "1463.3 min", which is arithmetic to do rather than an answer to read. */
+  function formatUptime(seconds) {
+    if (typeof seconds !== "number" || !isFinite(seconds) || seconds < 0) return "—";
+    const totalMin = Math.floor(seconds / 60);
+    if (totalMin < 60) return totalMin + " min";
+    const totalHours = Math.floor(totalMin / 60);
+    const minutes = totalMin % 60;
+    if (totalHours < 24) return minutes ? `${totalHours}h ${minutes}m` : `${totalHours}h`;
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    return hours ? `${days}d ${hours}h` : `${days}d`;
+  }
+
   async function loadDiagnostics() {
     try {
       const res = await fetch("/api/latest");
       if (!res.ok) throw new Error("request failed");
       const d = await res.json();
-      document.getElementById("d-rssi").textContent = fmt(d.wifi_rssi_db, 0) + " dB";
+      document.getElementById("d-rssi").textContent = fmt(d.wifi_rssi_db, 0) + " dBm";
       document.getElementById("d-esptemp").textContent = fmt(displayTemp(d.esp_temperature_c), 1) + " " + tempUnitLabel();
-      const uptimeMin = typeof d.uptime_s === "number" ? d.uptime_s / 60 : null;
-      document.getElementById("d-uptime").textContent = fmt(uptimeMin, 1) + " min";
+      document.getElementById("d-uptime").textContent = formatUptime(d.uptime_s);
       document.getElementById("d-firmware").textContent = d.firmware_version || "—";
       document.getElementById("d-since").textContent = timeAgo(d.time);
     } catch (e) {
@@ -360,7 +374,7 @@
       setAmbience(option);
       try {
         await postControl("/api/control/select/led_ambience", { option });
-        toast(option === "Off" ? "Ambience off — steady colour"
+        toast(option === "Off" ? "Ambience off — steady color"
           : `Ambience: ${option}`);
       } catch (e) {
         // Put the selection back rather than leaving the UI claiming an effect

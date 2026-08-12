@@ -3,13 +3,13 @@
 There is exactly ONE definition of "how bad is a given reading" in this system,
 and it does not live here. It lives in the firmware's `band_cuts_*` globals
 (apollo-air1-mqtt.yaml), which grade the readings, drive the publish cadence,
-and pick the LED colour. The device publishes that table to a retained MQTT
-topic; this module hands it to the browser so the page colours a CO2 tile with
+and pick the LED color. The device publishes that table to a retained MQTT
+topic; this module hands it to the browser so the page colors a CO2 tile with
 the same numbers the light on the wall used.
 
 Why the device owns it rather than this app:
 
-- The AIR-1 has to colour its LED with no network at all. It cannot depend on a
+- The AIR-1 has to color its LED with no network at all. It cannot depend on a
   dashboard for its own thresholds, so it must hold them regardless -- and a
   copy here would therefore be a *second* copy, not the only one.
 - The numbers are health judgements with citations (CDC/ASHRAE/OSHA for CO2,
@@ -52,8 +52,8 @@ _DEVICE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _write_lock = threading.Lock()
 
 # Channels the device grades. A payload missing any of them is treated as
-# malformed rather than partially applied: a half-populated table would colour
-# some tiles from the device and leave others uncoloured, which is exactly the
+# malformed rather than partially applied: a half-populated table would color
+# some tiles from the device and leave others uncolored, which is exactly the
 # split-brain this module exists to prevent.
 REQUIRED_CHANNELS = ("aqi", "co2", "voc", "nox")
 
@@ -74,7 +74,7 @@ def _valid(table):
         if not all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in cuts):
             return False
         # strict=False is the point here: cuts[1:] is deliberately one shorter,
-        # this is a pairwise-neighbour walk.
+        # this is a pairwise-neighbor walk.
         if any(b <= a for a, b in zip(cuts, cuts[1:], strict=False)):
             return False
     colors = table.get("colors")
@@ -140,12 +140,12 @@ def get_table(device=None):
     keep serving a stale cached one just because it happens to be on disk.
 
     The disk cache exists for the window where the broker is unreachable at
-    boot. Without it a broker outage would strip the colour out of every page,
+    boot. Without it a broker outage would strip the color out of every page,
     which is a worse failure than showing thresholds that were correct the last
     time we heard from the device.
 
-    None is a real answer, and callers must handle it: better an uncoloured
-    reading than a colour this app invented, since inventing one is how the page
+    None is a real answer, and callers must handle it: better an uncolored
+    reading than a color this app invented, since inventing one is how the page
     and the LED drifted apart in the first place.
     """
     raw = mqtt_bridge.get_raw(device, BANDS_SUFFIX)

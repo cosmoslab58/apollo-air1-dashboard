@@ -46,14 +46,14 @@ def _serve(bd, monkeypatch, payload):
 
 def test_none_when_never_seen(bd):
     # No live topic, no cache file: the honest answer is "no table", which the
-    # API turns into a 404 and the frontend into uncoloured readings.
+    # API turns into a 404 and the frontend into uncolored readings.
     assert bd.get_table() is None
 
 
 def test_live_table_is_served_and_cached(bd, monkeypatch):
     _serve(bd, monkeypatch, GOOD)
     assert bd.get_table() == GOOD
-    # Persisted, so a broker outage at next boot doesn't strip every colour.
+    # Persisted, so a broker outage at next boot doesn't strip every color.
     with open(bd.BANDS_FILE) as f:
         assert json.load(f) == GOOD
 
@@ -96,7 +96,7 @@ def test_malformed_live_table_falls_back_to_cache(bd, monkeypatch):
     _serve(bd, monkeypatch, GOOD)
     bd.get_table()
     # A truncated or half-written retained payload must not wipe out working
-    # colours; the last good table is better than none.
+    # colors; the last good table is better than none.
     _serve(bd, monkeypatch, {**GOOD, "aqi": []})
     assert bd.get_table() == GOOD
 
@@ -116,7 +116,7 @@ def test_unreadable_cache_is_ignored(bd, monkeypatch):
 
 
 def test_partial_channel_table_is_all_or_nothing(bd, monkeypatch):
-    # Half a table would colour some tiles from the device and leave others
-    # grey, which reads as a rendering bug rather than a missing table.
+    # Half a table would color some tiles from the device and leave others
+    # gray, which reads as a rendering bug rather than a missing table.
     _serve(bd, monkeypatch, {k: v for k, v in GOOD.items() if k != "voc"})
     assert bd.get_table() is None

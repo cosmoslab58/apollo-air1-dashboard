@@ -121,7 +121,7 @@ def test_tick_survives_malformed_payload(client, monkeypatch):
 
 
 def test_bands_404_when_device_never_published(client, monkeypatch):
-    # A 404 rather than a built-in default, so the frontend renders uncoloured
+    # A 404 rather than a built-in default, so the frontend renders uncolored
     # instead of showing thresholds this app made up. See bands.py.
     monkeypatch.setattr(bands, "get_table", lambda device=None: None)
     assert client.get("/api/bands").status_code == 404

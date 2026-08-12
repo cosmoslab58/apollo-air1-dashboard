@@ -130,8 +130,8 @@
     { id: "co2", label: "CO2", unit: "ppm", key: "co2_ppm", decimals: 0, band: bandFromCo2 },
     { id: "voc", label: "VOC index", unit: "", key: "voc_index", decimals: 0, band: bandForVocIndex },
     // NOx is graded by the device (its own cuts, offset 1 rather than VOC's
-    // 100) and drives the LED like any other channel, so it is coloured here
-    // too. It used to be the one graded channel this page left grey.
+    // 100) and drives the LED like any other channel, so it is colored here
+    // too. It used to be the one graded channel this page left gray.
     { id: "nox", label: "NOx index", unit: "", key: "nox_index", decimals: 0, band: bandForNoxIndex },
     { id: "temp", label: "Temperature", unit: () => tempUnitLabel(), key: "temperature_c", decimals: 1, band: () => null, convert: displayTemp },
     { id: "hum", label: "Humidity", unit: "%", key: "humidity_pct", decimals: 1, band: () => null },

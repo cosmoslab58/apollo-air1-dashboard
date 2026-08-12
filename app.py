@@ -277,7 +277,7 @@ def api_tick():
     # is honest; reporting this container's own device would attach one home's
     # live band to another home's readings.
     # ...and likewise for "All devices": there is no single sensor whose live
-    # band this could be, and picking one to speak for the house would colour
+    # band this could be, and picking one to speak for the house would color
     # the page from a room nobody selected.
     if not tenants.is_own():
         return jsonify({"seen_at": None, "air_band": None, "app_version": APP_VERSION})
@@ -307,13 +307,13 @@ def api_bands():
     404 rather than a built-in default on purpose. This app deliberately holds
     no thresholds of its own -- see bands.py -- so the honest answer to "we have
     never heard from the device" is "no table", and the frontend renders
-    readings uncoloured. Substituting a plausible-looking default here is
+    readings uncolored. Substituting a plausible-looking default here is
     precisely how the page and the LED came to disagree.
     """
     # Another home's readings were graded by *its* device against *its* table,
     # which this container has never received. Serving ours instead would be
     # substituting a plausible-looking default -- the exact move this module
-    # exists to refuse. Readings render uncoloured, which is the honest state.
+    # exists to refuse. Readings render uncolored, which is the honest state.
     if not tenants.is_own():
         if tenants.is_own_house():
             # Our own house, but no one sensor in view. Each device publishes

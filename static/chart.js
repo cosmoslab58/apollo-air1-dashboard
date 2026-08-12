@@ -13,7 +13,7 @@
 
 const ROW_H = 58, ROW_PAD_TOP = 17, ROW_PAD_BOTTOM = 8;
 // r leaves room for each lane's own scale (see rowScaleLabels). The single-
-// series renderChart below has carried a labelled y-axis all along; the lane
+// series renderChart below has carried a labeled y-axis all along; the lane
 // charts had none, so a spike told you something happened but never how big --
 // and since every lane auto-scales to its own min/max, two lanes with the same
 // visual amplitude could differ by orders of magnitude. Endpoint labels rather
@@ -69,14 +69,14 @@ function downsampleForDisplay(points, tMin, tMax, pxWidth, targetPxPerPoint = 3)
 //
 // vMin/vMax, deliberately, not the lo/hi the line is drawn against: those carry
 // the 12% headroom padding, which is a drawing device rather than a
-// measurement, and labelling it puts numbers on screen that were never read --
+// measurement, and labeling it puts numbers on screen that were never read --
 // a CO2 lane whose real span was 590-6500ppm came out claiming -467 at the
 // bottom. Each label sits at its own value's y position (so it is inset from
 // the lane edge by exactly that padding), which is what makes it an annotation
 // of the data rather than of the drawing.
 function rowScaleLabels(yAt, vMin, vMax, decimals, W) {
   const x = (W - ROW_PAD.r + ROW_SCALE_GAP).toFixed(1);
-  // Baseline sits at the text's bottom, so +4 centres a ~11px label on the
+  // Baseline sits at the text's bottom, so +4 centers a ~11px label on the
   // point it marks rather than hanging it above.
   const label = (v) => `<text class="chart-axis-label chart-y-label" x="${x}" y="${(yAt(v) + 4).toFixed(1)}">${fmt(v, decimals)}</text>`;
   // A dead-flat lane has one value, not a range -- two identical labels at the
@@ -98,7 +98,7 @@ function scrubTimeLabel(t) {
 }
 
 // Points are time-sorted (Influx order) -- bisect, then pick the closer
-// neighbour. Raw series can run to thousands of points at 7d.
+// neighbor. Raw series can run to thousands of points at 7d.
 function nearestPoint(points, t) {
   let lo = 0, hi = points.length - 1;
   while (hi - lo > 1) {
@@ -215,7 +215,7 @@ function renderRowChart(el, rows, opts) {
     svg += `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${lastColor}" stroke="var(--panel-raised)" stroke-width="1.5" />`;
     svg += `<circle cx="${(ROW_PAD.l + 3).toFixed(1)}" cy="${dotY.toFixed(1)}" r="3" fill="${lastColor}" />`;
     svg += rowScaleLabels(yAt, vMin, vMax, r.decimals, W);
-    svg += `<text class="chart-axis-label" x="${(ROW_PAD.l + 10).toFixed(1)}" y="${labelY.toFixed(1)}">${escapeHtml(r.label)} <tspan style="fill:${lastColor}">${fmt(last.v, r.decimals)}${r.unit}</tspan></text>`;
+    svg += `<text class="chart-axis-label" x="${(ROW_PAD.l + 10).toFixed(1)}" y="${labelY.toFixed(1)}"><tspan class="chart-series-name">${escapeHtml(r.label)}</tspan> <tspan style="fill:${lastColor}">${fmt(last.v, r.decimals)}${r.unit}</tspan></text>`;
   });
   const bottomY = nonEmpty.length * ROW_H + 10;
   svg += `<text class="chart-axis-label" x="${ROW_PAD.l}" y="${bottomY}">${opts.leftLabel || ""}</text>`;
@@ -313,7 +313,7 @@ function renderOverlayRowChart(el, rows, opts) {
     const inText = lastIn ? `In ${fmt(lastIn.v, r.decimals)}${r.unit}` : "In —";
     const outText = lastOut ? `Out ${fmt(lastOut.v, r.decimals)}${r.unit}` : "Out —";
     const labelY = top + ROW_PAD_TOP - 5;
-    svg += `<text class="chart-axis-label" x="${ROW_PAD.l.toFixed(1)}" y="${labelY.toFixed(1)}">${escapeHtml(r.label)} <tspan style="fill:${inColor}">${inText}</tspan> · <tspan style="fill:${outColor}">${outText}</tspan></text>`;
+    svg += `<text class="chart-axis-label" x="${ROW_PAD.l.toFixed(1)}" y="${labelY.toFixed(1)}"><tspan class="chart-series-name">${escapeHtml(r.label)}</tspan> <tspan style="fill:${inColor}">${inText}</tspan> · <tspan style="fill:${outColor}">${outText}</tspan></text>`;
   });
   const bottomY = nonEmpty.length * ROW_H + 10;
   svg += `<text class="chart-axis-label" x="${ROW_PAD.l}" y="${bottomY}">${opts.leftLabel || ""}</text>`;

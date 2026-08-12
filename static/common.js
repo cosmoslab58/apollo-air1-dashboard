@@ -49,17 +49,17 @@ function formatConcentrationUnits(units) {
  * THIS FILE DEFINES NO THRESHOLDS. Every cutoff comes from the AIR-1, which
  * publishes its band table to a retained MQTT topic that the server re-serves
  * at /api/bands. The device grades its own readings against that table, sets
- * the publish cadence from it, and picks its LED colour from it -- so reading
+ * the publish cadence from it, and picks its LED color from it -- so reading
  * the same table here is what guarantees a CO2 tile on this page and the light
  * on the wall can never disagree.
  *
  * This used to be four hardcoded functions, and they HAD drifted: CO2 banded at
  * 1000/1500/2000 here versus 800/1100/2000/3500/5000 in the firmware, VOC had
- * no green band at all, and NOx was never coloured. A reading of 900ppm showed
+ * no green band at all, and NOx was never colored. A reading of 900ppm showed
  * green on this page while the LED was yellow.
  *
- * Until the table arrives, every band is null and readings render uncoloured.
- * That is deliberate: an invented colour is worse than no colour, because it is
+ * Until the table arrives, every band is null and readings render uncolored.
+ * That is deliberate: an invented color is worse than no color, because it is
  * indistinguishable from a real one.
  *
  * Band index -> CSS custom property. Six entries because the firmware grades
@@ -72,7 +72,7 @@ const BAND_VARS = ["good", "fair", "poor", "bad", "severe", "hazard"];
 let _bandTable = null;
 
 // Resolves once the first fetch settles, so pages can await it before their
-// initial render instead of painting uncoloured and then flashing into colour.
+// initial render instead of painting uncolored and then flashing into color.
 // Never rejects: a missing table is a supported state, not an error.
 const bandTableReady = fetch("/api/bands")
   .then((r) => (r.ok ? r.json() : null))
@@ -660,7 +660,7 @@ function pollInterval(fn, ms) {
  *
  * `fallbackMs` is a floor, not the primary mechanism. If /api/tick is
  * unreachable or the MQTT bridge is down, its token never moves and this
- * degrades to exactly the timer-based behaviour it replaced. It also bounds how
+ * degrades to exactly the timer-based behavior it replaced. It also bounds how
  * stale the page can get if a publish is somehow missed.
  *
  * setTimeout-chained rather than setInterval, because both the tick cadence and

@@ -34,7 +34,7 @@
   //
   // NOTE: intentionally not aligned with the BAND_VARS css names (good/fair/
   // .../hazard). Those are style hooks, some used outside band context
-  // (--good colours a downward trend arrow), so renaming them would be churn
+  // (--good colors a downward trend arrow), so renaming them would be churn
   // for no gain. These strings are the user-facing vocabulary.
   function bandLabel(band) {
     return {
@@ -294,10 +294,10 @@
       const d = await res.json();
 
       // Worst across all four graded channels, and the channel that got it
-      // there -- the same comparison the device makes to colour its LED. The
+      // there -- the same comparison the device makes to color its LED. The
       // previous version compared only AQI and CO2, so it could not name VOC,
       // which is in fact this unit's worst channel 94% of the time it is above
-      // green, and it showed a colour the light disagreed with.
+      // green, and it showed a color the light disagreed with.
       const { band, label } = worstBandOf(d);
       const inAqi = document.getElementById("in-aqi");
       inAqi.textContent = typeof d.aqi === "number" ? String(Math.round(d.aqi)) : "—";
@@ -330,9 +330,9 @@
   updateForecastLink();
   fetchAwayLoc().then(updateForecastLink);
   // Wait for the device's band table before the first paint, so tiles come up
-  // already coloured rather than grey-then-flash. bandTableReady never rejects
-  // -- if no table ever arrives, these render uncoloured and stay that way,
-  // which is the intended "we don't invent colours" behaviour.
+  // already colored rather than gray-then-flash. bandTableReady never rejects
+  // -- if no table ever arrives, these render uncolored and stay that way,
+  // which is the intended "we don't invent colors" behavior.
   bandTableReady.then(() => {
     loadLatest();
     loadOutside();

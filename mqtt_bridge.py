@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # silently changes the topic, and publishes to the old one just go nowhere.
 PREVENT_SLEEP = "prevent_sleep"
 # LED brightness doubles as the master: 0 % is off, so there is no separate
-# enable switch. LED_ALARM_MODE picks the behaviour -- on = dark until a reading
+# enable switch. LED_ALARM_MODE picks the behavior -- on = dark until a reading
 # is dangerous then strobe, off = steady air-quality color.
 # NOTE: ESPHome derives the MQTT object_id from the entity *name*, not its
 # yaml id. The name is "LED Brightness", so the topic is led_brightness even
@@ -50,7 +50,7 @@ LED_BRIGHTNESS = "led_brightness"
 # these two constants know about the asymmetry.
 LED_NIGHT_BRIGHTNESS = "led_night_brightness"
 LED_ALARM_MODE = "led_alarm_mode"
-# Ambience: a decorative modulation of the steady band colour. A SELECT rather
+# Ambience: a decorative modulation of the steady band color. A SELECT rather
 # than two switches because ESPHome runs at most one light effect at a time, so
 # the states really are mutually exclusive — a pair of toggles could represent
 # a combination the device cannot be in.

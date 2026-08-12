@@ -12,7 +12,7 @@ FIELDS = [
     "voc_index", "nox_index", "aqi",
     # 0-5 worst-of severity band as the FIRMWARE graded it (-1 = nothing
     # readable). Deliberately not derived here or in the browser: the device
-    # owns the thresholds that colour its own LED, and re-deriving them
+    # owns the thresholds that color its own LED, and re-deriving them
     # elsewhere is how this page ends up disagreeing with the light on the
     # wall. (It also drove the frontend's poll rate until firmware 1.3.15-mqtt,
     # when the device's variable 60s/15s cadence was replaced by a flat 5s.)

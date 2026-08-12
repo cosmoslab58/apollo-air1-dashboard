@@ -107,7 +107,7 @@ def own_device():
     be independent failure domains.
 
     `MQTT_DEVICE` is the modern setting; the second segment of the older
-    `MQTT_TOPIC_PREFIX` (`<house>/<device>`) is honoured for back-compat, which
+    `MQTT_TOPIC_PREFIX` (`<house>/<device>`) is honored for back-compat, which
     is what makes an un-updated env behave exactly as it did before. Empty is a
     perfectly good answer for a house whose sensors are all discovered from
     data."""
