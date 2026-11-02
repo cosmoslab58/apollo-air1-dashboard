@@ -111,24 +111,34 @@ def test_owm_away_history_reshapes_and_sorts(monkeypatch):
 
 # ---------- away.py orchestration + cache ----------
 
-def test_airnow_away_history_dedups_dominant_and_sorts(monkeypatch):
+def test_airnow_away_history_one_state_call_filtered_to_the_area(monkeypatch):
     monkeypatch.setenv("AIRNOW_API_KEY", "k")
+    monkeypatch.setattr(airnow, "get_current_observation",
+                        lambda zip_code: {"state_code": "WI", "reporting_area_name": "Rhinelander"})
+    calls = []
 
-    # One "call per day" returns that day's readings; two pollutants share a
-    # timestamp -> keep the dominant (max) AQI; -1 (not computed) is dropped.
+    # The by-state service returns every reporting area's daily values over the
+    # range; keep only this area, the dominant (max) pollutant per day, and drop -1.
     def fake_get(url, params=None, **k):
-        date = params["date"][:10]
+        calls.append(params)
         return FakeResp([
-            {"DateObserved": date + " ", "HourObserved": 9, "ParameterName": "O3", "AQI": 40},
-            {"DateObserved": date + " ", "HourObserved": 9, "ParameterName": "PM2.5", "AQI": 55},
-            {"DateObserved": date + " ", "HourObserved": 10, "ParameterName": "PM2.5", "AQI": -1},
+            {"dateObserved": "2026-11-01", "reportingAreaName": "Rhinelander", "parameterName": "OZONE", "dailyAQI": 40},
+            {"dateObserved": "2026-11-01", "reportingAreaName": "Rhinelander", "parameterName": "PM2.5", "dailyAQI": 55},
+            {"dateObserved": "2026-10-31", "reportingAreaName": "Rhinelander", "parameterName": "PM2.5", "dailyAQI": 30},
+            {"dateObserved": "2026-10-30", "reportingAreaName": "Rhinelander", "parameterName": "PM2.5", "dailyAQI": -1},
+            {"dateObserved": "2026-11-01", "reportingAreaName": "Milwaukee", "parameterName": "PM2.5", "dailyAQI": 90},
         ])
 
     monkeypatch.setattr(airnow.requests, "get", fake_get)
     pts = airnow.get_away_history("54554", 3)
-    assert len(pts) == 3  # 3 days, one usable hour each (the -1 hour dropped)
-    assert pts[0]["time"] < pts[-1]["time"]  # sorted ascending
-    assert all(p["aqi"] == 55 for p in pts)  # dominant PM2.5 wins over O3
+    assert len(calls) == 1 and calls[0]["stateCode"] == "WI"
+    assert calls[0]["startDate"] < calls[0]["endDate"]
+    assert pts == [{"time": "2026-10-31T00:00:00", "aqi": 30}, {"time": "2026-11-01T00:00:00", "aqi": 55}]
+
+
+def test_airnow_away_history_without_a_resolved_area_is_empty(monkeypatch):
+    monkeypatch.setattr(airnow, "get_current_observation", lambda zip_code: None)
+    assert airnow.get_away_history("54554", 3) == []
 
 
 def test_away_history_unknown_provider():

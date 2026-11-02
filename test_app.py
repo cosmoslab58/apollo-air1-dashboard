@@ -14,6 +14,7 @@ import google_aq
 import home_config
 import influx
 import mqtt_bridge
+import owm
 import purpleair
 import tenants
 
@@ -684,7 +685,8 @@ def test_forecast_home_zip_reads_stored_coords_not_a_live_airnow_call(client, mo
 
 def test_home_set_uses_resolved_coordinates_by_default(client, monkeypatch):
     monkeypatch.setattr(airnow, "get_current_observation",
-                        lambda zip_code: {"lat": 42.5, "lon": -83.4, "reporting_area": "Somewhere, MI"})
+                        lambda zip_code: {"reporting_area": "Somewhere, MI"})
+    monkeypatch.setattr(owm, "geocode_zip", lambda zip_code: (42.5, -83.4))
     monkeypatch.setattr(purpleair, "nearest_outdoor_sensor", lambda lat, lon: None)
     monkeypatch.setattr(home_config, "set_home", lambda **kw: (kw, True))
     res = client.post("/api/home", json={"zip": "48324"})
@@ -695,7 +697,8 @@ def test_home_set_uses_resolved_coordinates_by_default(client, monkeypatch):
 
 def test_home_set_coordinate_override(client, monkeypatch):
     monkeypatch.setattr(airnow, "get_current_observation",
-                        lambda zip_code: {"lat": 42.5, "lon": -83.4, "reporting_area": "Somewhere, MI"})
+                        lambda zip_code: {"reporting_area": "Somewhere, MI"})
+    monkeypatch.setattr(owm, "geocode_zip", lambda zip_code: (42.5, -83.4))
     seen = {}
     monkeypatch.setattr(purpleair, "nearest_outdoor_sensor",
                         lambda lat, lon: seen.update(lat=lat, lon=lon) or None)
@@ -710,7 +713,8 @@ def test_home_set_coordinate_override(client, monkeypatch):
 
 def test_home_set_invalid_coordinates_is_400(client, monkeypatch):
     monkeypatch.setattr(airnow, "get_current_observation",
-                        lambda zip_code: {"lat": 42.5, "lon": -83.4, "reporting_area": "Somewhere, MI"})
+                        lambda zip_code: {"reporting_area": "Somewhere, MI"})
+    monkeypatch.setattr(owm, "geocode_zip", lambda zip_code: (42.5, -83.4))
     res = client.post("/api/home", json={"zip": "48324", "lat": "nope", "lon": -83.4})
     assert res.status_code == 400
     assert "numbers" in res.get_json()["error"]
@@ -718,7 +722,8 @@ def test_home_set_invalid_coordinates_is_400(client, monkeypatch):
 
 def test_home_set_out_of_range_coordinates_is_400(client, monkeypatch):
     monkeypatch.setattr(airnow, "get_current_observation",
-                        lambda zip_code: {"lat": 42.5, "lon": -83.4, "reporting_area": "Somewhere, MI"})
+                        lambda zip_code: {"reporting_area": "Somewhere, MI"})
+    monkeypatch.setattr(owm, "geocode_zip", lambda zip_code: (42.5, -83.4))
     res = client.post("/api/home", json={"zip": "48324", "lat": 999, "lon": -83.4})
     assert res.status_code == 400
     assert "range" in res.get_json()["error"]

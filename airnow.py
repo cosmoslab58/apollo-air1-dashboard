@@ -7,9 +7,12 @@ import requests
 import aq_shared
 from epa_aqi import band_for_aqi, band_for_category  # used internally; band math lives in epa_aqi
 
-API_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/"
-HISTORICAL_API_URL = "https://www.airnowapi.org/aq/observation/zipCode/historical/"
-FORECAST_API_URL = "https://www.airnowapi.org/aq/forecast/zipCode/"
+# AirNow retired its zipCode/latLong services on 2026-10-01 (they now answer with a
+# WebServiceError). These are the replacements; their payloads use lowerCamelCase keys,
+# and the observation ones carry no state code, no coordinates and no category number.
+API_URL = "https://www.airnowapi.org/aq/observation/current/ziplatlong/"
+HISTORICAL_API_URL = "https://www.airnowapi.org/aq/observation/historical/state/"
+FORECAST_API_URL = "https://www.airnowapi.org/aq/forecast/current/"
 CACHE_TTL_S = 20 * 60  # AirNow refreshes hourly, but the exact publish moment within the
 # hour isn't fixed and its own reporting lag varies -- a shorter cache
 # means a fetch that lands just before AirNow publishes a new hour
@@ -55,51 +58,112 @@ def _format_reporting_area(area, state_code):
     return f"{area}, {state_code}"
 
 
+# US AQS monitor ids are SSCCCNNNN with SS the state FIPS code: the only place the new
+# current-observation payload still says which state a reading is in.
+_FIPS_STATES = {
+    "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO", "09": "CT", "10": "DE",
+    "11": "DC", "12": "FL", "13": "GA", "15": "HI", "16": "ID", "17": "IL", "18": "IN", "19": "IA",
+    "20": "KS", "21": "KY", "22": "LA", "23": "ME", "24": "MD", "25": "MA", "26": "MI", "27": "MN",
+    "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH", "34": "NJ", "35": "NM",
+    "36": "NY", "37": "NC", "38": "ND", "39": "OH", "40": "OK", "41": "OR", "42": "PA", "44": "RI",
+    "45": "SC", "46": "SD", "47": "TN", "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA",
+    "54": "WV", "55": "WI", "56": "WY", "72": "PR",
+}
+# Category names on AirNow's 1-6 scale, for band_for_category when no AQI was computed.
+_CATEGORY_NUMBERS = {
+    "good": 1, "moderate": 2, "unhealthy for sensitive groups": 3,
+    "unhealthy": 4, "very unhealthy": 5, "hazardous": 6,
+}
+
+
+def _state_from_site(site_id):
+    site_id = str(site_id or "")
+    return _FIPS_STATES.get(site_id[:2]) if re.fullmatch(r"\d{9}", site_id) else None
+
+
+def _category_number(name):
+    return _CATEGORY_NUMBERS.get((name or "").strip().lower())
+
+
+def _hour(value):
+    """hourObserved arrives as "18:00" now (an int before); the UI wants the int."""
+    try:
+        return int(str(value).split(":")[0])
+    except (TypeError, ValueError):
+        return None
+
+
+def _get(url, params):
+    resp = requests.get(url, params={"format": "application/json", **params,
+                                     "API_KEY": os.environ["AIRNOW_API_KEY"]}, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    if isinstance(data, dict) and data.get("WebServiceError"):
+        # AirNow answers errors (a retired service, a bad key) with HTTP 200 and this object;
+        # treating it as "no data" is how the 2026-10-01 retirement went unnoticed for a month.
+        raise RuntimeError(f"AirNow {url}: {data['WebServiceError'][0].get('Message')}")
+    return data
+
+
 _cache = aq_shared.TTLCache(CACHE_TTL_S)  # current-conditions, keyed by zip
 _forecast_cache = aq_shared.TTLCache(FORECAST_CACHE_TTL_S)  # forecast, keyed by zip
 
 
 def _fetch(zip_code):
-    resp = requests.get(
-        API_URL,
-        params={
-            "format": "application/json",
-            "zipCode": zip_code,
-            "distance": SEARCH_DISTANCE_MI,
-            "API_KEY": os.environ["AIRNOW_API_KEY"],
-        },
-        timeout=10,
-    )
-    resp.raise_for_status()
-    readings = resp.json()
+    readings = _get(API_URL, {"zipCode": zip_code, "distance": SEARCH_DISTANCE_MI})
     if not readings:
         return None
 
     # AQI is -1 on readings AirNow hasn't computed a number for -- same
     # sentinel the forecast endpoint uses (see _fetch_forecast). Rank by
-    # Category.Number first so an uncomputed row never outranks a real one,
+    # category first so an uncomputed row never outranks a real one,
     # and surface the AQI as None rather than passing -1 through, which
     # band_for_aqi would otherwise read as a healthy "good".
-    dominant = max(readings, key=lambda r: (r["Category"]["Number"], r["AQI"]))
-    dominant_aqi = dominant["AQI"] if dominant["AQI"] and dominant["AQI"] > 0 else None
+    def aqi_of(r):
+        a = r.get("nowcastAQI")
+        return a if isinstance(a, (int, float)) and a > 0 else None
+
+    dominant = max(readings, key=lambda r: (_category_number(r.get("aqiCategoryName")) or 0,
+                                            r.get("nowcastAQI") or -1))
+    dominant_aqi = aqi_of(dominant)
+    area = dominant.get("reportingAreaName") or ""
+    state = _state_from_site(dominant.get("siteID")) or _forecast_state(zip_code)
     return {
         "aqi": dominant_aqi,
-        "category": dominant["Category"]["Name"],
-        "band": band_for_aqi(dominant_aqi) if dominant_aqi else band_for_category(dominant["Category"]["Number"]),
-        "dominant_pollutant": dominant["ParameterName"],
-        "reporting_area": _format_reporting_area(dominant["ReportingArea"], dominant["StateCode"]),
-        "lat": dominant.get("Latitude"),
-        "lon": dominant.get("Longitude"),
-        "observed_hour": dominant["HourObserved"],
+        "category": dominant.get("aqiCategoryName"),
+        "band": band_for_aqi(dominant_aqi) if dominant_aqi
+        else band_for_category(_category_number(dominant.get("aqiCategoryName"))),
+        "dominant_pollutant": _parameter(dominant.get("parameterName")),
+        "reporting_area": _format_reporting_area(area, state) if state else area,
+        # The raw pair, which the historical-by-state service is keyed on.
+        "reporting_area_name": area,
+        "state_code": state,
+        "observed_hour": _hour(dominant.get("hourObserved")),
         "pollutants": [
             {
-                "parameter": r["ParameterName"],
-                "aqi": r["AQI"] if r["AQI"] and r["AQI"] > 0 else None,
-                "category": r["Category"]["Name"],
+                "parameter": _parameter(r.get("parameterName")),
+                "aqi": aqi_of(r),
+                "category": r.get("aqiCategoryName"),
             }
             for r in readings
         ],
     }
+
+
+def _forecast_state(zip_code):
+    """Some reporting areas come back with no siteID; the forecast service, which
+    is cached for hours and already called for the Forecast page, still names the
+    state. Best-effort."""
+    try:
+        forecast = get_forecast(zip_code)
+    except Exception:
+        return None
+    return forecast.get("state_code") if forecast else None
+
+
+def _parameter(name):
+    """The new services say "OZONE" where the old ones (and the rest of the app) say "O3"."""
+    return "O3" if (name or "").upper() == "OZONE" else name
 
 
 def get_current_observation(zip_code):
@@ -157,60 +221,48 @@ def observation_from_row(row):
 
 
 def _fetch_forecast(zip_code):
-    resp = requests.get(
-        FORECAST_API_URL,
-        params={
-            "format": "application/json",
-            "zipCode": zip_code,
-            "distance": SEARCH_DISTANCE_MI,
-            "API_KEY": os.environ["AIRNOW_API_KEY"],
-        },
-        timeout=10,
-    )
-    resp.raise_for_status()
-    rows = resp.json()
+    rows = _get(FORECAST_API_URL, {"zipCode": zip_code, "distance": SEARCH_DISTANCE_MI})
     if not rows:
         return None
 
     by_date = {}
     discussion = None
     for r in rows:
-        by_date.setdefault(r["DateForecast"], []).append(r)
-        if not discussion and (r.get("Discussion") or "").strip():
-            discussion = _clean_discussion(r["Discussion"])
+        by_date.setdefault(r["dateValid"], []).append(r)
+        if not discussion and (r.get("discussion") or "").strip():
+            discussion = _clean_discussion(r["discussion"])
 
     days = []
     for date in sorted(by_date):
         readings = by_date[date]
         # AQI is -1 on rows AirNow hasn't computed a number for (common on
-        # active alert days) — Category.Number is still meaningful then, so
+        # active alert days) — categoryNumber is still meaningful then, so
         # rank by that first and use it as the band fallback.
-        dominant = max(readings, key=lambda r: (r["Category"]["Number"], r["AQI"]))
-        dominant_aqi = dominant["AQI"] if dominant["AQI"] and dominant["AQI"] > 0 else None
+        dominant = max(readings, key=lambda r: (r.get("categoryNumber") or 0, r.get("aqi") or -1))
+        dominant_aqi = dominant["aqi"] if dominant.get("aqi") and dominant["aqi"] > 0 else None
         days.append({
             "date": date,
             "aqi": dominant_aqi,
-            "category": dominant["Category"]["Name"],
-            "band": band_for_aqi(dominant_aqi) if dominant_aqi else band_for_category(dominant["Category"]["Number"]),
-            "dominant_pollutant": dominant["ParameterName"],
+            "category": dominant.get("categoryName"),
+            "band": band_for_aqi(dominant_aqi) if dominant_aqi else band_for_category(dominant.get("categoryNumber")),
+            "dominant_pollutant": _parameter(dominant.get("parameterName")),
             # An agency-issued "Action Day" designation -- distinct from the
             # AQI number itself, e.g. PM2.5 can be flagged even on a day its
-            # own AQI wasn't computed (see the -1/Category fallback above).
-            "action_day": any(r.get("ActionDay") for r in readings),
+            # own AQI wasn't computed (see the -1/category fallback above).
+            "action_day": any(r.get("actionDay") for r in readings),
             "pollutants": [
                 {
-                    "parameter": r["ParameterName"],
-                    "aqi": r["AQI"] if r["AQI"] and r["AQI"] > 0 else None,
-                    "category": r["Category"]["Name"],
+                    "parameter": _parameter(r.get("parameterName")),
+                    "aqi": r["aqi"] if r.get("aqi") and r["aqi"] > 0 else None,
+                    "category": r.get("categoryName"),
                 }
                 for r in readings
             ],
         })
 
     return {
-        "reporting_area": _format_reporting_area(rows[0]["ReportingArea"], rows[0]["StateCode"]),
-        "lat": rows[0].get("Latitude"),
-        "lon": rows[0].get("Longitude"),
+        "reporting_area": _format_reporting_area(rows[0].get("reportingArea"), rows[0].get("stateCode")),
+        "state_code": rows[0].get("stateCode"),
         "discussion": discussion,
         "days": days,
         # Stamped once here (not by the TTL cache) so it stays correct across
@@ -224,48 +276,34 @@ def get_forecast(zip_code, force=False):
     return _forecast_cache.get(zip_code, lambda: _fetch_forecast(zip_code), force=force)
 
 
-def _fetch_historical(zip_code, day):
-    """One AirNow historical-observation call for a single date. Best-effort:
-    returns [] on any error so a sparse/failed day just contributes no points
-    rather than sinking the whole window."""
+def get_away_history(zip_code, days):
+    """LIVE AirNow daily history for an away location. The zip-based historical
+    service was retired; its replacement is keyed by state and returns daily
+    values for every reporting area in it over a date range, so: one
+    current-observation lookup (cached) for the zip's reporting area and state,
+    one call for the window, then that area's dominant (max across pollutants)
+    daily AQI. Points come back in the shared flat history shape ({time, aqi}),
+    one per day as before. Best-effort: any failure is an empty series."""
     try:
-        resp = requests.get(
-            HISTORICAL_API_URL,
-            params={
-                "format": "application/json",
-                "zipCode": zip_code,
-                "date": day.strftime("%Y-%m-%dT00-0000"),
-                "distance": SEARCH_DISTANCE_MI,
-                "API_KEY": os.environ["AIRNOW_API_KEY"],
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return resp.json() or []
+        obs = get_current_observation(zip_code)
+        if not obs or not obs.get("state_code") or not obs.get("reporting_area_name"):
+            return []
+        today = datetime.now(UTC).date()
+        rows = _get(HISTORICAL_API_URL, {
+            "stateCode": obs["state_code"],
+            "startDate": (today - timedelta(days=days - 1)).isoformat(),
+            "endDate": today.isoformat(),
+        }) or []
     except Exception:
         return []
-
-
-def get_away_history(zip_code, days):
-    """LIVE AirNow historical-by-zip for an away location. AirNow's historical
-    endpoint is date-parameterized (one call per day) and its archive is sparse,
-    so this is a coarser series than the hourly providers -- one call per day
-    over the window, keeping the dominant (max across pollutants) AQI at each
-    observed hour. Points come back in the shared flat history shape ({time,
-    aqi}). AirNow is keyed by zip directly, so no geocoding is needed."""
-    today = datetime.now(UTC).date()
-    by_time = {}
-    for d in range(days):
-        day = today - timedelta(days=d)
-        for r in _fetch_historical(zip_code, day):
-            aqi = r.get("AQI")
-            if aqi is None or aqi < 0:  # -1 = not computed
-                continue
-            date_observed = (r.get("DateObserved") or "").strip()
-            hour = r.get("HourObserved")
-            if not date_observed or hour is None:
-                continue
-            ts = f"{date_observed}T{int(hour):02d}:00:00"
-            if ts not in by_time or aqi > by_time[ts]:
-                by_time[ts] = int(round(aqi))
-    return [{"time": t, "aqi": v} for t, v in sorted(by_time.items())]
+    area = obs["reporting_area_name"].strip().lower()
+    by_day = {}
+    for r in rows:
+        if (r.get("reportingAreaName") or "").strip().lower() != area:
+            continue
+        aqi = r.get("dailyAQI")
+        day = (r.get("dateObserved") or "").strip()
+        if aqi is None or aqi < 0 or not day:  # -1 = not computed
+            continue
+        by_day[day] = max(by_day.get(day, 0), int(round(aqi)))
+    return [{"time": f"{d}T00:00:00", "aqi": v} for d, v in sorted(by_day.items())]

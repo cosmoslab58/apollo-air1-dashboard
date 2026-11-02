@@ -758,18 +758,26 @@ def api_forecast():
 
 
 def _resolve_zip(zip_code):
-    """Resolve a zip to coordinates + reporting area via AirNow's current-obs
-    response (which geocodes the zip for us), and double as a coverage check --
-    a zip AirNow can't resolve won't have data for any provider. Returns a dict
-    or None."""
+    """Resolve a zip to coordinates + reporting area, and double as a coverage
+    check -- a zip AirNow has no reporting area for won't have data for any
+    provider. AirNow gives the reporting area; its current service no longer
+    returns coordinates, so those come from OpenWeatherMap's zip geocoder.
+    Returns a dict or None."""
     try:
         obs = airnow.get_current_observation(zip_code)
     except Exception:
         logging.exception("Failed to resolve zip via AirNow zip=%s", zip_code)
         return None
-    if not obs or obs.get("lat") is None:
+    if not obs or not obs.get("reporting_area"):
         return None
-    return {"lat": obs["lat"], "lon": obs["lon"], "reporting_area": obs.get("reporting_area")}
+    try:
+        point = owm.geocode_zip(zip_code)
+    except Exception:
+        logging.exception("Failed to geocode zip via OpenWeatherMap zip=%s", zip_code)
+        return None
+    if point is None:
+        return None
+    return {"lat": point[0], "lon": point[1], "reporting_area": obs.get("reporting_area")}
 
 
 @app.route("/api/home")

@@ -262,3 +262,21 @@ def get_away_history(lat, lon, days):
 
     points.sort(key=lambda p: p["time"])
     return points
+
+
+def geocode_zip(zip_code):
+    """A US zip's (lat, lon) from OpenWeatherMap's geocoder, or None if it doesn't
+    know the zip. AirNow used to hand coordinates back with its current-observation
+    response; its replacement service doesn't, so away/home zips are geocoded here."""
+    resp = requests.get(
+        "https://api.openweathermap.org/geo/1.0/zip",
+        params={"zip": f"{zip_code},US", "appid": os.environ["OWM_API_KEY"]},
+        timeout=10,
+    )
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("lat") is None or data.get("lon") is None:
+        return None
+    return data["lat"], data["lon"]
