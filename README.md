@@ -1,4 +1,4 @@
-# Apollo AIR-1 Dashboard — Cosmos Lab
+# Apollo AIR-1 Dashboard — cosmoslab
 
 Flask app for the Apollo AIR-1 air quality sensor: current readings + history
 from InfluxDB, live device controls over MQTT, and an outdoor AQI comparison
