@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, url_for
@@ -79,6 +80,61 @@ if not DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
     # matters after a broker data loss; it's a no-op when the link isn't up yet
     # (connect is async) or no real home has been saved.
     home_config.republish_home()
+
+
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _origin_host(url):
+    """host[:port] of an Origin or Referer value, or None if it has none.
+
+    The literal "null" origin (sandboxed iframes, file: pages) parses to no
+    netloc and so counts as foreign, which is the point."""
+    try:
+        return urlsplit(url).netloc.lower() or None
+    except ValueError:
+        return None
+
+
+@app.before_request
+def _require_same_origin():
+    """Refuse state-changing requests that a browser sent from another site.
+
+    Nothing here has a login, so without this any page the user happens to
+    open could POST to /api/control/button/factory_reset_esp and the browser
+    would deliver it: a cross-site form POST is a "simple" request with no
+    preflight, and the button routes don't even need a body. The tenant
+    cookies are SameSite=Lax, which stops them riding along, but the control
+    routes fall back to our own house without them anyway.
+
+    Order of evidence, strongest first. Sec-Fetch-Site is set by the browser
+    and cannot be forged from page script; "same-origin" is our own buttons
+    and "none" is the user typing or bookmarking. Failing that, Origin (sent
+    on every cross-origin request and on same-origin POSTs by current
+    browsers), then Referer, must name this host. A request with none of the
+    three did not come from a browser page, so CSRF does not apply and it is
+    let through: curl, scripts and the test client keep working.
+
+    The host compared against is the one the browser addressed: Host as the
+    proxy passed it, or X-Forwarded-Host when a proxy rewrote Host. A page
+    on another site cannot set either header on a request it makes."""
+    if request.method not in _UNSAFE_METHODS:
+        return None
+    fetch_site = request.headers.get("Sec-Fetch-Site")
+    if fetch_site:
+        if fetch_site in ("same-origin", "none"):
+            return None
+        return jsonify({"error": "cross-site request refused"}), 403
+    claimed = request.headers.get("Origin") or request.headers.get("Referer")
+    if claimed is None:
+        return None
+    allowed = {request.host.lower()}
+    forwarded = request.headers.get("X-Forwarded-Host")
+    if forwarded:
+        allowed.add(forwarded.split(",")[0].strip().lower())
+    if _origin_host(claimed) in allowed:
+        return None
+    return jsonify({"error": "cross-site request refused"}), 403
 
 
 @app.before_request

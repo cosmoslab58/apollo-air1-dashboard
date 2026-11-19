@@ -248,6 +248,68 @@ def test_control_503_when_mqtt_unavailable(client, monkeypatch):
     assert client.post("/api/control/button/esp_reboot").status_code == 503
 
 
+def _capture_buttons(monkeypatch):
+    _reachable(monkeypatch)
+    pressed = []
+    monkeypatch.setattr(app_module.mqtt_bridge, "publish_button",
+                        lambda device, object_id: pressed.append(object_id))
+    return pressed
+
+
+@pytest.mark.parametrize("headers", [
+    # A form on another site auto-submitting: the browser marks it cross-site.
+    {"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"},
+    # Another subdomain of ours is "same-site", still not this app.
+    {"Sec-Fetch-Site": "same-site", "Origin": "https://other.cosmoslab.dev"},
+    # Older browser with no Fetch Metadata: Origin alone must name this host.
+    {"Origin": "https://evil.example"},
+    {"Origin": "null"},
+    {"Referer": "https://evil.example/page"},
+])
+def test_control_refuses_cross_site_post(client, monkeypatch, headers):
+    """No login guards these routes, so a page on any site could POST to
+    factory_reset and the browser would deliver it (a form POST needs no
+    preflight and the button routes need no body)."""
+    pressed = _capture_buttons(monkeypatch)
+    res = client.post("/api/control/button/factory_reset_esp", headers=headers)
+    assert res.status_code == 403
+    assert pressed == []
+
+
+@pytest.mark.parametrize("path, body", [
+    ("/api/tenant", {"tenant": "walnut"}),
+    ("/api/away", {"zip": "48324"}),
+    ("/api/home", {"zip": "48324"}),
+])
+def test_other_writes_refuse_cross_site(client, path, body):
+    res = client.post(path, json=body, headers={"Sec-Fetch-Site": "cross-site"})
+    assert res.status_code == 403
+
+
+@pytest.mark.parametrize("headers", [
+    # Our own device page's buttons, current browser.
+    {"Sec-Fetch-Site": "same-origin", "Origin": "http://localhost"},
+    # Same, browser without Fetch Metadata.
+    {"Origin": "http://localhost"},
+    {"Referer": "http://localhost/device"},
+    # Behind a proxy that rewrote Host: the browser addressed the public name.
+    {"Origin": "https://air.example", "X-Forwarded-Host": "air.example"},
+    # Not a browser at all (curl, scripts): nothing to forge, let through.
+    {},
+])
+def test_control_allows_same_origin_post(client, monkeypatch, headers):
+    pressed = _capture_buttons(monkeypatch)
+    res = client.post("/api/control/button/esp_reboot", headers=headers)
+    assert res.status_code == 200
+    assert pressed == ["esp_reboot"]
+
+
+def test_cross_site_get_still_served(client):
+    """Reads are not state changes; a cross-site link to a page must still work."""
+    res = client.get("/", headers={"Sec-Fetch-Site": "cross-site"})
+    assert res.status_code == 200
+
+
 def test_control_503_when_device_is_offline(client, monkeypatch):
     """The broker being reachable is not the same as the device being reachable.
     Commands are QoS 0 and non-retained, so one published while the AIR-1 is
