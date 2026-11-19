@@ -129,7 +129,7 @@ def _on_message(client, userdata, msg):
         return
     # `<topic-root>/<device>/<suffix...>`. Because the root already covers
     # everything above the device, the segment straight after it IS the device
-    # -- the same position Node-RED reads (parts[5] on the six-segment tree).
+    # -- the same position automation's air1 tab reads (parts[5] on the six-segment tree).
     # partition rather than split(maxsplit) because the suffix keeps its own
     # slashes: "switch/prevent_sleep/state" is one key, not three.
     device, _, suffix = msg.topic[len(prefix):].partition("/")
@@ -372,7 +372,7 @@ def publish_button(device, object_id):
 
 def publish_config(topic, payload, retain=True):
     """Publish a JSON config document to `topic`, retained by default so a
-    subscriber (Node-RED's home-config mqtt-in) picks up the current value the
+    subscriber (automation's air1 tab, its config/home subscription) picks up the current value the
     moment it connects, even after a restart. Best-effort like the control
     publishes: returns False when the broker link isn't up rather than raising,
     so setting the home location degrades to "saved but not yet pushed" instead

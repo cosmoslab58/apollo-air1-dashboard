@@ -160,7 +160,7 @@ def test_latest_ok(client, monkeypatch):
 def test_latest_prefers_the_live_mqtt_snapshot(client, monkeypatch):
     """Our own device serves from the retained snapshot, not InfluxDB.
 
-    This is the whole point of the split: Node-RED decimates on the way into
+    This is the whole point of the split: automation decimates on the way into
     InfluxDB, so the database deliberately holds a slower series than the device
     publishes. Falling back here would show a stale reading and make the
     device's fast cadence pointless -- so if this ever starts passing through to

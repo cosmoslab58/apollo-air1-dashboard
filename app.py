@@ -75,7 +75,7 @@ BUTTON_IDS = {
 # set; only start the MQTT client in the process that's actually serving.
 if not DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
     mqtt_bridge.start()
-    # Best-effort re-push of a previously saved home to Node-RED. The broker
+    # Best-effort re-push of a previously saved home to automation. The broker
     # normally still holds the retained copy from the last save, so this only
     # matters after a broker data loss; it's a no-op when the link isn't up yet
     # (connect is async) or no real home has been saved.
@@ -392,7 +392,7 @@ def api_latest():
 
     The MQTT path exists because these are two different jobs. A live readout
     wants the newest value and does not care about durability; history wants a
-    uniform cadence and does not care about latency. Node-RED decimates on the
+    uniform cadence and does not care about latency. automation decimates on the
     way into InfluxDB, so the database deliberately holds a SLOWER series than
     the device publishes -- serving this endpoint from there would show a
     reading up to a full decimation window old and make the device's 5s cadence
@@ -519,16 +519,16 @@ def _read_from_db(fetch, label, missing_msg):
 
 
 # provider -> (fetch, log label, 404 hint). All read current conditions back
-# from InfluxDB (Node-RED polls every provider in); AirNow is the default.
+# from InfluxDB (automation's air1 tab polls every provider in); AirNow is the default.
 _CURRENT_READERS = {
     "google": (google_aq.get_current_observation, "Google air quality",
-               "no Google air quality data yet — is GOOGLE_AQ_API_KEY set on the nodered container?"),
+               "no Google air quality data yet — is GOOGLE_AQ_API_KEY set for automation?"),
     "purpleair": (purpleair.get_current_observation, "PurpleAir",
-                  "no PurpleAir data yet — is PURPLEAIR_API_KEY set on the nodered container?"),
+                  "no PurpleAir data yet — is PURPLEAIR_API_KEY set for automation?"),
     "openweathermap": (owm.get_current_observation, "OpenWeatherMap pollution",
-                       "no OpenWeatherMap pollution data yet — is OWM_API_KEY set on the nodered container?"),
+                       "no OpenWeatherMap pollution data yet — is OWM_API_KEY set for automation?"),
     "airnow": (lambda: airnow.observation_from_row(influx.query_airnow_latest()), "AirNow",
-               "no AirNow data yet — is AIRNOW_API_KEY set on the nodered container?"),
+               "no AirNow data yet — is AIRNOW_API_KEY set for automation?"),
 }
 # Providers whose reading carries no reporting-area of its own -> stamp the
 # shared home label (from AirNow's stored reading).
@@ -845,7 +845,7 @@ def api_home_get():
 def api_home_set():
     """Change the tracked home location. Resolves + verifies the zip, resolves
     the nearest healthy PurpleAir sensor, then persists and pushes the record
-    to Node-RED over the retained config topic. Changing home starts a fresh
+    to automation over the retained config topic. Changing home starts a fresh
     Influx series under the new location slug -- old data stays under the old
     one."""
     # Saving publishes to HOME_CONFIG_TOPIC, which is inside this container's
@@ -867,7 +867,7 @@ def api_home_set():
     if resolved is None:
         return jsonify({"error": "couldn't resolve or verify that zip with AirNow"}), 400
 
-    # The zip is still required -- AirNow's own Home poll (via Node-RED) only
+    # The zip is still required -- AirNow's own Home poll (in automation) only
     # takes a zip, and it doubles as the reporting-area label lookup above.
     # But AirNow's zip resolution is "nearest reporting station", not a true
     # centroid, and can land noticeably off from the actual location (see

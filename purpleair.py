@@ -2,9 +2,9 @@
 community sensor. Unlike AirNow/Google there's no regional model here: it's
 one physical sensor, so readings are minutes fresh but PM-only (no gases).
 
-Node-RED polls one hardcoded sensor every 10 minutes and writes corrected
-PM2.5/PM10 + a recomputed AQI to InfluxDB (see the "Format PurpleAir Fields
-& Tags" function in the Apollo AIR-1 flow) -- this module just reads that
+automation's air1 tab polls the home's sensor every 10 minutes and writes
+corrected PM2.5/PM10 + a recomputed AQI to InfluxDB (format_purpleair in
+automation/tabs/air1/logic.py); this module just reads that
 back, same pattern as owm.py. The dashboard itself never calls PurpleAir.
 Raw cf_1 PM2.5 is corrected there with EPA's Barkjohn equation (the same
 one AirNow's own Fire & Smoke map applies to PurpleAir sensors) before
@@ -21,13 +21,13 @@ import aq_shared
 import epa_aqi
 import influx
 
-# The nearest outdoor sensor to home, picked once and hardcoded directly in
-# the Node-RED flow (sensor 178257) -- kept in sync with that flow's own
-# comment. If that sensor ever goes offline, both need a manual update.
+# The nearest outdoor sensor to home, picked once (sensor 178257). It is also
+# the fallback sensor in automation's air1 tab (build_purpleair) when the home
+# record carries none. If that sensor ever goes offline, both need a manual update.
 SENSOR_NAME = "St. Marys"
 
 # (concentration field, EPA parameter, units, per-pollutant AQI field). The AQI
-# is the one Node-RED derived from the EPA-corrected concentration; the app
+# is the one automation's air1 tab derived from the EPA-corrected concentration; the app
 # reads it for the dashboard while the Technical page keeps the concentration.
 _CONCENTRATION_FIELDS = [
     ("purpleair_pm2_5_ugm3", "PM2.5", "MICROGRAMS_PER_CUBIC_METER", "purpleair_pm2_5_aqi_epa"),
@@ -37,10 +37,10 @@ _CONCENTRATION_FIELDS = [
 
 def get_current_observation():
     """Headline AQI, category, and dominant pollutant are read straight from
-    the fields Node-RED computed (purpleair_aqi_epa / purpleair_category /
+    the fields automation's air1 tab computed (purpleair_aqi_epa / purpleair_category /
     purpleair_dominant_pollutant) from the EPA-corrected PM concentrations --
     the app no longer recomputes them, so the dashboard, Grafana, and
-    Node-RED all agree on the number. Concentrations pass through raw (already
+    automation all agree on the number. Concentrations pass through raw (already
     the corrected values), so no extra rounding here."""
     return aq_shared.observation(
         influx.query_purpleair_latest(),
@@ -54,7 +54,7 @@ def get_current_observation():
 
 
 def get_history(hours):
-    """Reads back what Node-RED has been persisting to InfluxDB (see
+    """Reads back what automation's air1 tab has been persisting to InfluxDB (see
     get_current_observation above) rather than PurpleAir's own history
     endpoint -- that endpoint is gated by API key tier and often just isn't
     available, so this is the only reliable source of PurpleAir history,
@@ -72,7 +72,7 @@ def get_history(hours):
 # ----------------------------------------------------------------------------
 # Live PurpleAir calls -- used ONLY for the Away view and for resolving the
 # nearest sensor when the user sets a location. The Home path never calls
-# PurpleAir directly (Node-RED polls it into InfluxDB, read back above).
+# PurpleAir directly (automation's air1 tab polls it into InfluxDB, read back above).
 # ----------------------------------------------------------------------------
 
 PA_API_BASE = "https://api.purpleair.com/v1"
@@ -86,9 +86,9 @@ _SENSOR_MIN_CONFIDENCE = 90      # PurpleAir's 0-100 data-quality score
 
 def corrected_pm25(pa_cf1, humidity):
     """EPA's US-wide Barkjohn correction for PurpleAir's raw cf_1 PM2.5 -- the
-    same correction AirNow's Fire & Smoke map applies, and the one Node-RED
-    applies on the Home path (epaAqi.correctedPm25). Replicated here because the
-    Away path can't lean on Node-RED. Humidity defaults to 50% when the sensor
+    same correction AirNow's Fire & Smoke map applies, and the one automation's
+    air1 tab applies on the Home path (corrected_pm25 in automation/shared/aq.py).
+    Replicated here because the Away path can't lean on automation. Humidity defaults to 50% when the sensor
     didn't report it."""
     if pa_cf1 is None:
         return None

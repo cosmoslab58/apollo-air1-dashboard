@@ -174,17 +174,17 @@ def query_outside_history(hours):
 # fields happen to share the measurement.
 OUTSIDE_WEATHER_FIELDS = ["temperature_c", "humidity_pct", "pressure_hpa"]
 
-# OpenWeatherMap air_pollution components, written by Node-RED with an owm_
-# prefix precisely so they stay separable from AirNow's fields in the same
-# measurement (see the Apollo AIR-1 Node-RED tab). owm_aqi_epa/owm_category/
-# owm_dominant_pollutant are the EPA AQI headline + labels Node-RED computes
-# from the concentrations (the "Format OWM Pollution Fields & Tags" function)
+# OpenWeatherMap air_pollution components, written by automation's air1 tab with
+# an owm_ prefix precisely so they stay separable from AirNow's fields in the
+# same measurement. owm_aqi_epa/owm_category/owm_dominant_pollutant are the EPA
+# AQI headline + labels it computes from the concentrations (format_owm_pollution
+# in automation/tabs/air1/logic.py)
 # -- read straight back rather than recomputed here, same as the Google and
 # PurpleAir feeds below.
 OWM_FIELDS = [
     "owm_aqi_epa", "owm_aqi_index", "owm_pm2_5_ugm3", "owm_pm10_ugm3",
     "owm_o3_ugm3", "owm_no2_ugm3", "owm_so2_ugm3", "owm_co_ugm3", "owm_nh3_ugm3",
-    # Per-pollutant AQI Node-RED derives from the concentrations above (NH3 has
+    # Per-pollutant AQI automation derives from the concentrations above (NH3 has
     # no EPA breakpoint, so it stays concentration-only). See owm.py.
     "owm_pm2_5_aqi_epa", "owm_pm10_aqi_epa",
     "owm_o3_aqi_epa", "owm_no2_aqi_epa", "owm_so2_aqi_epa", "owm_co_aqi_epa",
@@ -206,29 +206,29 @@ def query_outside_weather(hours):
 
 
 # Google and PurpleAir current-reading + history both come from here now --
-# Node-RED polls both on a timer straight into Influx, the same pattern
+# automation's air1 tab polls both on a timer straight into Influx, the same pattern
 # AirNow/OWM already use, instead of the dashboard calling either API
 # itself. Prefixed field names follow the same collision-avoidance
 # precedent as OWM_FIELDS above.
 #
 # The headline AQI, category, and dominant pollutant are read from the
-# *_aqi_epa / *_category / *_dominant_pollutant fields Node-RED computes from
-# the concentrations (its "Format ... Fields & Tags" functions) -- the app no
+# *_aqi_epa / *_category / *_dominant_pollutant fields automation computes from
+# the concentrations (the air1 tab's format_* functions) -- the app no
 # longer recomputes them, so the number the dashboard shows, the number
-# Grafana shows, and the number Node-RED derived are one and the same.
+# Grafana shows, and the number automation derived are one and the same.
 #
 # Note the *_aqi_epa naming: an earlier google_aqi/purpleair_aqi field was
 # written with inconsistent numeric types (int on some points, float on
 # others), which makes InfluxDB v2's TSM engine panic ("interface conversion:
 # tsm1.Value is tsm1.FloatValue, not tsm1.IntegerValue") the instant a query
-# touches that series -- confirmed still fatal. Node-RED writes the AQI to the
+# touches that series -- confirmed still fatal. automation writes the AQI to the
 # separate, always-float *_aqi_epa field precisely to sidestep that poisoned
 # series; those legacy fields must never be queried.
 GOOGLE_FIELDS = [
     "google_aqi_epa",
     "google_pm2_5_ugm3", "google_pm10_ugm3",
     "google_o3_ppb", "google_no2_ppb", "google_so2_ppb", "google_co_ppb",
-    # Per-pollutant AQI Node-RED derives from the concentrations above, so the
+    # Per-pollutant AQI automation derives from the concentrations above, so the
     # dashboard shows every pollutant on the AQI scale (see google_aq.py).
     "google_pm2_5_aqi_epa", "google_pm10_aqi_epa",
     "google_o3_aqi_epa", "google_no2_aqi_epa", "google_so2_aqi_epa", "google_co_aqi_epa",
@@ -240,7 +240,7 @@ GOOGLE_STRING_FIELDS = [
 
 PURPLEAIR_FIELDS = [
     "purpleair_aqi_epa", "purpleair_pm2_5_ugm3", "purpleair_pm10_ugm3",
-    # Per-pollutant AQI Node-RED derives from the corrected concentrations.
+    # Per-pollutant AQI automation derives from the corrected concentrations.
     "purpleair_pm2_5_aqi_epa", "purpleair_pm10_aqi_epa",
 ]
 PURPLEAIR_STRING_FIELDS = ["purpleair_category", "purpleair_dominant_pollutant"]
@@ -248,7 +248,7 @@ PURPLEAIR_STRING_FIELDS = ["purpleair_category", "purpleair_dominant_pollutant"]
 # AirNow's own fields are the bare (unprefixed) ones in this measurement --
 # Google/PurpleAir/OWM all carry a provider prefix precisely so AirNow's
 # aqi/category/dominant_pollutant/reporting_area and its per-pollutant *_aqi
-# numbers stay separable here. Node-RED already computes the AQI (AirNow's
+# numbers stay separable here. automation already stores the AQI (AirNow's
 # API hands it to us), so current conditions read straight from the DB like
 # every other provider, rather than the app calling AirNow live.
 AIRNOW_FIELDS = ["aqi", "pm2_5_aqi", "pm10_aqi", "o3_aqi", "no2_aqi", "co_aqi", "so2_aqi"]

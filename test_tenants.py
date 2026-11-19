@@ -115,7 +115,7 @@ def test_the_house_prefix_wins_over_the_legacy_pair(monkeypatch):
 
 
 def test_a_house_is_one_segment(monkeypatch):
-    # Node-RED reads the tenant as parts[0] of the topic. A prefix with a slash
+    # automation's air1 tab reads the tenant as one topic segment. A prefix with a slash
     # in it would put the dashboard on a different tenant id than the ingestion
     # flow tags the data with, and the two would never meet.
     monkeypatch.setenv("MQTT_HOUSE_PREFIX", "walnut/living_room")

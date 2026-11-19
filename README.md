@@ -12,7 +12,7 @@ from the settings gear. The outdoor data source (AirNow/Google/PurpleAir/OWM)
 is picked from the "via X" stamp next to any outside reading.
 
 ```
-Apollo AIR-1  <-->  mosquitto  -->  Node-RED  -->  InfluxDB (air_quality)  -->  this app
+Apollo AIR-1  <-->  mosquitto  -->  automation  -->  InfluxDB (air_quality)  -->  this app
                         ^ commands (switch/number/button)  |
                         +-----------------------------------+
 AirNow API  -->  this app (outdoor AQI, cached hourly)
@@ -61,8 +61,8 @@ python app.py
 - `INFLUX_TOKEN` — **read-only** token scoped to the `air_quality` bucket,
   not the admin token used by the `iot` stack. This app only ever reads from
   Influx — every provider's current reading and history (AirNow, Google,
-  PurpleAir, OpenWeatherMap) is written by Node-RED (see the Apollo AIR-1
-  flow), not by this app. Rotate in the InfluxDB UI
+  PurpleAir, OpenWeatherMap) is written by automation (its air1 tab,
+  `automation/tabs/air1`), not by this app. Rotate in the InfluxDB UI
   (`http://192.168.4.113:8086`, org `cosmoslab`) under *Load Data → API
   Tokens* if it ever leaks.
 - `MQTT_USERNAME` / `MQTT_PASSWORD` — mosquitto credentials for this app's
@@ -193,12 +193,12 @@ The Device page's Status LED card has two brightness sliders, **Day** and
 — fully day at sun elevation +3°, fully night at −6°, linear in between, so the
 fade is roughly 35–50 min here and lengthens in winter on its own.
 
-**The device does the fade, not this app and not Node-RED.** The obvious
-alternative — Node-RED computing a curve and publishing to the brightness
-command topic every minute — was rejected because that topic *is* where the
+**The device does the fade, not this app and not the server.** The obvious
+alternative, a server flow (Node-RED at the time) computing a curve and
+publishing to the brightness command topic every minute, was rejected because that topic *is* where the
 user's setting is stored: overwriting it every minute leaves nowhere to hold
 "what I want at night", and the slider would read 12% at midnight and 100% at
-noon. It would also stop working whenever Node-RED did, and write flash on
+noon. It would also stop working whenever the server did, and write flash on
 every step. The firmware got `time:` (SNTP) and `sun:` instead.
 
 Two consequences for this app:
@@ -215,7 +215,7 @@ Two consequences for this app:
   strobe runs at 100% and ignores both sliders, as it always has.
 
 The device takes its coordinates from the same retained `config/home` message
-this app already publishes for Node-RED (see `home_config.py`), falling back to
+this app already publishes for automation (see `home_config.py`), falling back to
 a compile-time default. Changing home in the app re-points the sun calculation
 too, with no firmware rebuild.
 
@@ -357,8 +357,8 @@ success here, so "which sensor" is always a decision the route has already
 made.
 
 Everything else the app renders is an InfluxDB read, including "current
-conditions" for all four outside providers (Node-RED polls them in; the app
-never calls an upstream provider for Home). Node-RED tags every point with
+conditions" for all four outside providers (automation polls them in; the app
+never calls an upstream provider for Home). automation tags every point with
 `tenant`, so scoping those reads to a chosen home covers nearly the whole
 surface in one place.
 
@@ -366,8 +366,8 @@ surface in one place.
   has data. The list comes from InfluxDB's `tenant` tag values, not config, so a
   newly provisioned home shows up on its own. `TENANT_LABELS` gives them
   readable names; without it the picker shows the raw tenant id.
-- **The house id** is `MQTT_HOUSE_PREFIX`, the same first topic segment
-  Node-RED reads as the tenant off `+/+/state`. One rule on both sides is what
+- **The house id** is `MQTT_HOUSE_PREFIX`, the same account segment
+  automation's air1 tab reads as the tenant off the topic. One rule on both sides is what
   stops the two disagreeing about who a reading belongs to. (Deriving it from
   a legacy `MQTT_TOPIC_PREFIX` is back-compat only.)
 - **A second picker appears when a home has more than one sensor**, with an
@@ -408,17 +408,18 @@ place and applies to `air_quality` only — `outside_air_quality` has no
 outside panel, which looks exactly like an upstream outage.
 
 A second **house** still needs its own container to be *controllable*: its own
-broker account and topic ACL, and its own Node-RED registry row (see
-`coslab-nodered-flows`). A second **room in this house** needs none of that —
-add the device, and it appears in the picker with working controls. Provider
-API keys live on the Node-RED container, which polls once per home — they are
-not per-tenant here.
+broker account and topic ACL; automation's air1 tab adds the home to its
+registry from the retained `config/home` message the app publishes. A second
+**room in this house** needs none of that: add the device, and it appears in the
+picker with working controls. Provider API keys live in automation's settings
+(`automation/config.py`), and its air1 tab polls once per home; they are not
+per-tenant here.
 
 ## Related repos
 
 - [`apollo-air1-mqtt-esphome`](../apollo-air1-mqtt-esphome) — the ESPHome
   firmware and MQTT payload schema.
-- [`coslab-nodered-flows`](../coslab-nodered-flows) — the flow that writes
+- [`automation`](../automation): its air1 tab (`automation/tabs/air1`) writes
   into `air_quality`.
 - [`coslab-mqtt-broker`](../coslab-mqtt-broker) — broker accounts, topic ACLs,
   and the watcher that alerts when a publish is denied.

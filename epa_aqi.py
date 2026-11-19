@@ -1,8 +1,9 @@
 """EPA AQI math shared by every provider: breakpoint tables, the
 concentration -> AQI interpolation, category names, and the good/fair/poor/bad
-severity bands. This is the single Python source of truth for AQI math; the
-Node-RED formatters and static/aqi.js carry parallel copies that
-tests/aqi_parity checks against these tables."""
+severity bands. This is the single Python source of truth for AQI math in
+this app. automation's AQI math (automation/shared/aq.py, used by its air1 tab)
+and static/aqi.js carry parallel copies; test_aqi_parity.py checks aqi.js
+against these tables."""
 
 # EPA's AQI breakpoint tables (current/2024 revision for PM2.5), each row
 # [conc_lo, conc_hi, aqi_lo, aqi_hi]. Units are EPA's own: µg/m³ for

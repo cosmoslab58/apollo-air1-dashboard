@@ -483,7 +483,7 @@
   ["mouseup", "mouseleave", "touchend", "touchcancel"].forEach((ev) => holdBtn.addEventListener(ev, cancelHold));
 
   /* ---------- home location editor ----------
-   * Deliberately rare to touch: it repoints what Node-RED polls and logs to
+   * Deliberately rare to touch: it repoints what automation polls and logs to
    * InfluxDB (see home_config.py), unlike Away (edited from the header's
    * settings panel on every page). Living here rather than in that popover
    * is the friction -- same "Setup" section as the sleep/calibration/
@@ -546,7 +546,7 @@
       document.getElementById("home-coords").value = "";
       const s = d.purpleair;
       const sensorMsg = s ? ` — using PurpleAir ${s.name || "#" + s.index} (${s.distance_km} km)` : " — no PurpleAir sensor nearby";
-      toast((d.published ? "Home updated" : "Home saved (Node-RED will pick it up when the broker reconnects)") + sensorMsg);
+      toast((d.published ? "Home updated" : "Home saved (automation will pick it up when the broker reconnects)") + sensorMsg);
     } catch (err) {
       toast("Couldn't save — " + err.message);
     }

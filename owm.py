@@ -1,6 +1,6 @@
 """OpenWeatherMap pollution provider -- reads the owm_-prefixed fields that
-Node-RED writes into the outside_air_quality measurement (piggybacked on the
-chassis tab's existing 5-minute OWM weather poll, one air_pollution call per
+automation's air1 tab writes into the outside_air_quality measurement
+(piggybacked on its 5-minute OWM weather poll, one air_pollution call per
 ~15 min). This dashboard never calls OpenWeatherMap itself, so switching to
 this provider adds zero OWM API traffic.
 
@@ -18,7 +18,7 @@ import epa_aqi
 import influx
 
 # OWM component -> (concentration field, EPA parameter, units, per-pollutant
-# AQI field). The AQI is the one Node-RED derived from the concentration and
+# AQI field). The AQI is the one automation's air1 tab derived from the concentration and
 # stored alongside it -- the app just reads it. Every OWM component is µg/m³.
 # NH3 has no EPA AQI breakpoint, so it's shown as a concentration only (and is
 # dropped from the AQI-only dashboard) -- appended separately below.
@@ -43,7 +43,7 @@ FORECAST_COMPONENTS = [
     ("co", "CO"),
 ]
 
-# Unlike the current-reading/history above (polled by Node-RED into Influx),
+# Unlike the current-reading/history above (polled by automation into Influx),
 # the forecast is fetched live and on demand -- exactly the pattern Google's
 # forecast uses. It's the one place this app calls OpenWeatherMap directly.
 FORECAST_URL = "https://api.openweathermap.org/data/2.5/air_pollution/forecast"
@@ -66,13 +66,13 @@ def _aqi_for(parameter, ugm3):
 
 def get_current_observation():
     """Headline AQI, category, and dominant pollutant are read straight from
-    the fields Node-RED computed (owm_aqi_epa / owm_category /
+    the fields automation's air1 tab computed (owm_aqi_epa / owm_category /
     owm_dominant_pollutant) -- the worst-of-all-components EPA AQI, the same
     number Grafana reads -- rather than recomputed here. Per-pollutant rows
     are shown as raw concentrations (like the Google/PurpleAir cards), so the
     only AQI number on the card is the one authoritative headline. Category
-    and dominant fall back gracefully for points written before Node-RED
-    started storing them. reporting_area is left None for the caller to fill
+    and dominant fall back gracefully for points written before the
+    poller started storing them. reporting_area is left None for the caller to fill
     with the shared home label."""
     row = influx.query_owm_latest()
     obs = aq_shared.observation(

@@ -170,9 +170,9 @@ def get_current_observation(zip_code):
     return _cache.get(zip_code, lambda: _fetch(zip_code))
 
 
-# Node-RED writes each AirNow parameter's AQI to a <param>_aqi field, keyed by
-# the same lower-cased/underscored ParameterName it reports (see the "Format
-# AirNow Fields & Tags" function) -- mapped back to display labels here.
+# automation's air1 tab writes each AirNow parameter's AQI to a <param>_aqi
+# field, keyed by the same lower-cased/underscored ParameterName it reports (see
+# format_airnow in automation/tabs/air1/logic.py) -- mapped back to display labels here.
 _ROW_POLLUTANT_FIELDS = [
     ("pm2_5_aqi", "PM2.5"), ("pm10_aqi", "PM10"), ("o3_aqi", "O3"),
     ("no2_aqi", "NO2"), ("co_aqi", "CO"), ("so2_aqi", "SO2"),
@@ -194,7 +194,7 @@ def _clean_discussion(text):
 def observation_from_row(row):
     """Build the same current-observation shape _fetch returns, but from a
     stored InfluxDB row (influx.query_airnow_latest) instead of a live AirNow
-    call -- current conditions are polled into the DB by Node-RED, so the
+    call -- current conditions are polled into the DB by automation, so the
     dashboard reads them back like every other provider. The forecast, which
     carries the forecaster discussion and isn't persisted, stays live."""
     if row is None:

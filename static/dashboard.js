@@ -163,7 +163,7 @@
   // which has no EPA breakpoint) is dropped here; it reappears under
   // Readout=Units, which shows the provider's reported concentration instead,
   // falling back to AQI for AirNow (which reports no concentration). The AQI is
-  // derived upstream (Node-RED) and read per pollutant; the concentration->AQI
+  // derived upstream (automation) and read per pollutant; the concentration->AQI
   // fallback only fills a gap for older points stored without a per-pollutant
   // AQI -- the app does no primary AQI math.
   function outsideRowsHtml(pollutants) {

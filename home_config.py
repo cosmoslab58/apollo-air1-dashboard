@@ -1,14 +1,15 @@
 """Home + Away location -- the single source of truth for which place the
 dashboard tracks.
 
-- **Home** drives Node-RED's polling and is logged to InfluxDB. When it changes
-  the app pushes the home record to Node-RED over a *retained* MQTT config topic
-  (see mqtt_bridge.publish_config); Node-RED reads coords/zip/sensor from it and
+- **Home** drives automation's polling (its air1 tab) and is logged to InfluxDB.
+  When it changes the app pushes the home record to automation over a *retained*
+  MQTT config topic (see mqtt_bridge.publish_config); the air1 tab reads
+  coords/zip/sensor from it and
   tags every `outside_air_quality` write with the home `location_slug`. Coords
   and tag therefore always change together, from this one record.
 - **Away** is a live, unpersisted read-through the app renders from provider
   historical APIs (see away.py). Its selection is stored here so the view
-  survives a refresh, but it is *never* published to Node-RED and never logged.
+  survives a refresh, but it is *never* published to automation and never logged.
 
 Stored as one JSON file on the shared data volume, same read-modify-write +
 atomic-replace pattern as locations.py."""
@@ -23,14 +24,15 @@ import mqtt_bridge
 DATA_DIR = os.environ.get("DATA_DIR", "data")
 HOME_FILE = os.path.join(DATA_DIR, "home.json")
 
-# Retained topic Node-RED subscribes to for the home poll config. Overridable so
-# a test/staging deploy -- or another account -- can point at its own topic.
+# Retained topic automation's air1 tab subscribes to for the home poll config.
+# Overridable so a test/staging deploy (or another account) can point at its own
+# topic.
 #
-# The value must follow the estate topic convention, `<account>/<device>/config/home`.
-# Node-RED subscribes to the wildcard `+/+/config/home` and derives the account
-# from the FIRST segment and the device from the LAST one before the channel, so
-# a topic outside that shape lands under the wrong account or -- outside the
-# broker ACL grant -- is silently denied at QoS 0 with nothing logged anywhere.
+# The value must follow the estate topic convention, `<root>/<device>/config/home`.
+# automation subscribes to the wildcard `cosmoslab/+/+/+/+/+/config/home` and
+# takes the account from the third segment, so a topic outside that shape lands
+# under the wrong account or, outside the broker ACL grant, is silently denied
+# at QoS 0 with nothing logged anywhere.
 #
 # The default is DERIVED rather than written out, deliberately. It used to be the
 # literal "cosmoslab/air1/config/home" and stayed wrong through two renames
@@ -65,12 +67,12 @@ _write_lock = threading.Lock()
 
 def _default_home():
     # The pre-existing home this dashboard was built around, kept in sync with
-    # Node-RED's built-in fallback literals (Orchard Lake coords, PurpleAir
-    # 178257 "St. Marys", slug orchard_lake -- the slug Node-RED already tags
+    # automation's built-in fallback literals (Orchard Lake coords, PurpleAir
+    # 178257 "St. Marys", slug orchard_lake, the slug automation already tags
     # writes with). Shown until the user saves a home through the app, so the
     # display reflects what's actually being polled rather than a hollow blank.
     # This default is never auto-published (republish_home only fires for a
-    # genuinely saved home.json), so it changes nothing about what Node-RED does.
+    # genuinely saved home.json), so it changes nothing about what automation does.
     return {
         "zip": os.environ.get("AIRNOW_ZIP", "48324"),
         "lat": 42.5988,
@@ -127,11 +129,11 @@ def home_zip():
 
 
 def set_home(*, zip_code, lat, lon, reporting_area, purpleair_sensor, label=None):
-    """Persist a new home and push it to Node-RED (retained). The slug is
+    """Persist a new home and push it to automation (retained). The slug is
     derived once here from the friendly label (or AirNow's reporting area, or
     the zip) so the Influx tag is human-readable and stable. Returns
     (home, published) where `published` is False if the broker link was down --
-    the file is still written, and Node-RED will pick it up from the retained
+    the file is still written, and automation will pick it up from the retained
     topic once the app reconnects and re-publishes, or on the next save."""
     slug = slugify(label or reporting_area, f"zip_{zip_code}")
     home = {
@@ -157,13 +159,13 @@ def set_home(*, zip_code, lat, lon, reporting_area, purpleair_sensor, label=None
 
 
 def republish_home():
-    """Re-send the stored home to Node-RED. Called at app boot so a home saved
+    """Re-send the stored home to automation. Called at app boot so a home saved
     in a previous run is (re)published as a retained message even if the broker
     was down at the moment it was originally saved. No-op/False when the link
     is down or no real home (with coords) has been saved yet."""
     # Only a genuinely saved home should be re-pushed -- never the seeded
-    # default (which matches Node-RED's own literals anyway), so a fresh app
-    # with no home.json never publishes anything Node-RED wasn't already doing.
+    # default (which matches automation's own literals anyway), so a fresh app
+    # with no home.json never publishes anything automation wasn't already doing.
     if not os.path.exists(HOME_FILE):
         return False
     home = get_home()
@@ -179,7 +181,7 @@ def republish_home():
 
 
 def set_away(*, zip_code, lat, lon, reporting_area):
-    """Persist the away selection. Deliberately does NOT publish to Node-RED or
+    """Persist the away selection. Deliberately does NOT publish to automation or
     touch InfluxDB -- away is a live, unpersisted view. No PurpleAir sensor is
     stored: away.get_away_history resolves the nearest sensor live each time."""
     away = {

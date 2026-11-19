@@ -1,6 +1,6 @@
 """Unit tests for the home/away config store (home_config.py): default home,
 slugify, the set/clear round-trip against a temp data dir, and that saving a
-home publishes the record to Node-RED (the retained MQTT config) while away
+home publishes the record to automation (the retained MQTT config) while away
 never does. mqtt_bridge.publish_config is monkeypatched -- no broker is touched."""
 import importlib
 
@@ -20,7 +20,7 @@ def hc(tmp_path, monkeypatch):
 
 
 def test_default_home_when_no_file(hc):
-    # Default reflects the real current home (Node-RED's fallback literals), so
+    # Default reflects the real current home (automation's fallback literals), so
     # the app display is truthful before any save.
     home = hc.get_home()
     assert home["zip"] == "48324"
@@ -45,7 +45,7 @@ def test_set_home_persists_and_publishes(hc, monkeypatch):
     assert home["location_slug"] == "beverly_hills_ca"
     assert home["purpleair_sensor"] == 123
     assert hc.get_home()["zip"] == "90210"  # persisted
-    # The published payload is the poll record Node-RED needs -- coords + slug +
+    # The published payload is the poll record automation needs -- coords + slug +
     # sensor, no reporting_area.
     topic, payload = calls[0]
     assert payload["lat"] == 34.1 and payload["location_slug"] == "beverly_hills_ca"
@@ -77,7 +77,7 @@ def test_away_set_and_clear_never_publishes(hc, monkeypatch):
     assert hc.get_away()["zip"] == "10001"
     hc.clear_away()
     assert hc.get_away() is None
-    assert calls == []  # away is unpersisted-to-Node-RED by design
+    assert calls == []  # away is never published to automation by design
 
 
 def test_republish_home_noop_without_saved_file(hc, monkeypatch):

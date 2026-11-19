@@ -51,8 +51,8 @@ def _pollutant_label(code):
 # OpenWeatherMap/PurpleAir) guarantees the headline number, category, and
 # per-pollutant breakdown are always self-consistent, instead of trusting a
 # number that can silently disagree with the data sitting right next to it.
-# Node-RED's "Format Google Fields & Tags" function applies this exact same
-# math for the current-conditions poll (see the Apollo AIR-1 flow) -- this
+# automation's air1 tab (format_google in automation/tabs/air1/logic.py) applies
+# this exact same math for the current-conditions poll; this
 # copy is now used only for the still-live Forecast feature below.
 def _recomputed_aqi(raw_pollutants):
     best = None
@@ -94,7 +94,7 @@ def _pollutants_from(raw_pollutants):
 
 # Google's Air Quality concentration fields, by EPA parameter name, the unit
 # Google reports them in (µg/m³ for particulates, ppb for gases), and the
-# per-pollutant AQI field Node-RED derives from that concentration -- the app
+# per-pollutant AQI field automation derives from that concentration -- the app
 # reads the AQI rather than computing it.
 _CONCENTRATION_FIELDS = [
     ("google_pm2_5_ugm3", "PM2.5", "MICROGRAMS_PER_CUBIC_METER", "google_pm2_5_aqi_epa"),
@@ -107,16 +107,15 @@ _CONCENTRATION_FIELDS = [
 
 
 def get_current_observation():
-    """Reads back what Node-RED has been polling hourly and writing to
-    InfluxDB (see the "Format Google Fields & Tags" function in the Apollo
-    AIR-1 flow) instead of calling Google's API directly here -- same
+    """Reads back what automation's air1 tab has been polling hourly and
+    writing to InfluxDB (format_google in automation/tabs/air1/logic.py) instead of calling Google's API directly here -- same
     pattern as owm.py, and the dashboard no longer makes this call itself
     for any provider's current reading. Google's Forecast API is a
     different, on-demand feature and still calls Google live -- see
     get_forecast below.
 
     The headline AQI, category, and dominant pollutant are read straight
-    from the fields Node-RED computed (google_aqi_epa / google_category /
+    from the fields automation computed (google_aqi_epa / google_category /
     google_dominant_pollutant), not recomputed from the concentrations --
     same number Grafana reads. Category falls back to a lookup on the AQI
     only if the stored label is somehow absent (e.g. pre-migration points).
@@ -133,7 +132,7 @@ def get_current_observation():
         return None
 
     # Only the general-population + children lines are persisted (see the
-    # Node-RED flow) -- the per-sensitive-group breakdown isn't stored, so it's
+    # air1 tab in automation) -- the per-sensitive-group breakdown isn't stored, so it's
     # simply absent here rather than fabricated. Key is always present (None
     # when Google gave no guidance for this reading).
     obs["health_recommendations"] = None
@@ -230,7 +229,7 @@ _HISTORY_FIELD_MAP = {
 
 
 def get_history(hours):
-    """Reads back what Node-RED has been persisting to InfluxDB (see
+    """Reads back what automation has been persisting to InfluxDB (see
     get_current_observation above) instead of calling Google's own history
     API -- keeps every provider's History sourced the same way. Field names
     are stripped back to the shared flat shape (aqi/pm2_5_ugm3/o3_ppb/...)

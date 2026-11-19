@@ -5,7 +5,7 @@ broker tree it subscribes to and publishes controls on (`<house>/#`), and the
 broker ACL enforces that from the other side -- a topic outside the grant is
 silently denied at QoS 0 (see the README's broker section). So switching
 tenants here switches what is **read back from InfluxDB**: indoor history and
-every outside provider, all of which Node-RED polls in and tags with `tenant`.
+every outside provider, all of which automation's air1 tab polls in and tags with `tenant`.
 It does not, and cannot, move live device state or the control endpoints; those
 stay inside `own()`.
 
@@ -67,8 +67,9 @@ def own():
     """The house this container is wired to, and the tenant id of its data.
 
     `MQTT_HOUSE_PREFIX` is the modern setting and is ONE topic segment: the
-    same convention Node-RED uses when it takes the tenant id off
-    `+/+/state` as `parts[0]`. Keeping one rule for "what is a tenant id"
+    same convention automation's air1 tab uses when it takes the tenant id
+    off the topic as one segment (the account, `parts[2]` of
+    `cosmoslab/<category>/<account>/...`). Keeping one rule for "what is a tenant id"
     across both sides is what stops the dashboard and the ingestion flow from
     disagreeing about who a reading belongs to.
 
@@ -196,7 +197,7 @@ def known(force=False):
     """Tenant ids that have data, plus own().
 
     own() is always included even with no points yet, so a freshly provisioned
-    home is selectable before Node-RED has logged anything for it -- and so the
+    home is selectable before automation has logged anything for it -- and so the
     picker is never empty when InfluxDB is unreachable. A discovery failure is
     logged and degrades to just own(); it must not take the dashboard down,
     since every other read has its own error path already."""
